@@ -19,6 +19,16 @@ ilspycmd -p -o out/ \
   Package/Sinmai_Data/Managed/Assembly-CSharp.dll
 ```
 
+### 版本代號
+
+| 代號 | 說明 | 例 |
+|---|---|---|
+| SDEZ | 日版 | 1.60、1.65、1.66、1.70 |
+| SDGB | 國服（中國版），版本字串像 `Ver.CN1.56-B` | 1.50、1.55 |
+
+- 主要成員（Process、`GameManager`、`GamePlayManager`、`NotesManager`、判定入口 `JudgeResultSt.UpdateScore`）在 SDGB 1.50～SDEZ 1.66 都還在，但細節欄位會變。
+- 部分 SDEZ 1.66 包體用外置的 AMDaemon 執行環境：`Sinmai_Data\Plugins\amdaemon_api.dll` 和 `Sinmai_Data\Managed\AMDaemon.NET.dll` 必須是同一套；要先啟動 AMDaemon 再啟動 Sinmai（用包體附的啟動批次檔），直接點 `Sinmai.exe` 會因為沒有 IPC 對端而起不來。
+
 > 不同遊戲版本（例如 1.65 / 1.70）的 `Assembly-CSharp.dll` 內容不同。寫 mod 時要確認用的是哪一版；有些 mod 會直接以 DLL 的 SHA-256 標明只驗證過哪個版本。
 
 ## MelonLoader

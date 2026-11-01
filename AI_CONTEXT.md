@@ -1,6 +1,6 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`08`，工具在 `tools/cri/`。
+> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`09`，工具在 `tools/cri/`。
 > 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
@@ -8,6 +8,7 @@
 
 - `Package\Sinmai.exe`：Unity **2018.4.7f1**、**Mono**（不是 IL2CPP）、x64。
 - 遊戲邏輯：`Package\Sinmai_Data\Managed\Assembly-CSharp.dll`，可用 ILSpy / `ilspycmd -p -o out -r Managed -r MelonLoader/net35 Assembly-CSharp.dll` 反編譯。
+- 版本代號：SDEZ = 日版（1.60／1.65／1.66／1.70），SDGB = 國服（1.50／1.55，版本字串如 `Ver.CN1.56-B`）。部分 SDEZ 1.66 包體要先啟動外置 AMDaemon（`Plugins\amdaemon_api.dll` 和 `Managed\AMDaemon.NET.dll` 必須同一套）。
 - Loader：MelonLoader **0.6.4 Mono**，內含 HarmonyX（`MelonLoader\net35\0Harmony.dll`）。
 - 目錄：`Mods\*.dll`（mod）、`UserData\MelonPreferences.cfg`（`MelonPreferences`）、`MelonLoader\Latest.log`（日誌）、`LocalAssets\`（mod 慣用的本機資源）、`Sinmai_Data\Plugins\`（原生 DLL）。
 - csproj：`net48`、`LangVersion 9`、`Microsoft.NETFramework.ReferenceAssemblies`；參考 `MelonLoader.dll`、`0Harmony.dll`、`Assembly-CSharp.dll`、`UnityEngine.CoreModule.dll`（+ 依需要 `InputLegacyModule`、`ImageConversionModule`、`AssetBundleModule`、`UnityEngine.UI`），全部 `Private=false`。Linux 上 `dotnet build` 也能編。
@@ -17,6 +18,7 @@
 ## 2. 接入方式
 
 - **Harmony**（主要）：MelonLoader 自動套用組件內所有 `[HarmonyPatch]`。自己控制：`[assembly: HarmonyDontPatchAll]` + `HarmonyInstance.PatchAll(typeof(X))`；`new HarmonyLib.Harmony(id).PatchAll(asm)`；`harmony.Patch(method, prefix, postfix, transpiler, finalizer)`（可依設定決定掛不掛）。
+- 跨版本容錯：`AccessTools.TypeByName("Process.X")` + `AccessTools.Method` + `harmony.Patch`，找不到就略過；不要用 `[HarmonyPatch(typeof(X))]` 寫死可能不存在的型別。Postfix 的 `__instance` 宣告成 `object`，同一個 Postfix 就能掛在多個 Process 上。原方法參數可以用同名或位置 `__0`、`__1` 注入。
 - 補丁類型：Prefix（回 `false` 略過原方法；改參數 / `ref __result`）、Postfix（讀 / 改結果）、Finalizer（`Exception __exception`，回 `null` 吞掉例外）、Transpiler（改 IL，少用）。
 - 指定目標：`[HarmonyPatch(typeof(X), "M", typeof(int))]` 指定多載；getter 用 `MethodType.Getter` 或 `"get_Prop"`。
 - 讀寫私有成員：
@@ -37,6 +39,21 @@
 - 流程由 Process 組成（`MusicSelectProcess`、`PlInformationProcess`、`CodeReadProcess`…），命名空間是全域的 `Process`。
 - 每個玩家一個 Monitor（`MusicSelectMonitor`…，命名空間 `Monitor`）。
 - `MusicSelectProcess.OnStart` / `OnRelease` 會**按玩家數各觸發一次**，記得去重。
+- Process 一覽（`OnStart` / `OnRelease` Postfix 可得知目前畫面）：
+  - `Process.AdvertiseProcess`、`Process.AdvertiseCommercial.AdvertiseCommercialProcess`（待機）
+  - `Process.EntryProcess`（登入）
+  - `Process.PlInformationProcess`、`Process.InformationProcess`（資訊）
+  - `Process.GetPresentProcess`（禮物）
+  - `Process.ModeSelect.ModeSelectProcess`（模式選擇）
+  - `Process.RegionalSelectProcess`（地圖）
+  - `Process.CharacterSelectProces`（角色選擇；**原名少一個 s**）
+  - `Process.TicketSelect.TicketSelectProcess`（功能票）
+  - `Process.MusicSelectProcess`（選曲）
+  - `Process.MusicSelectInfoProcess`、`Process.GetMusicProcess`（讀取）
+  - 打歌中：用 `GameManager.IsInGame` 判斷
+  - `Process.ResultProcess`（結算）
+  - `Process.CodeReadProcess`（DX PASS）
+- `OnRelease` 只在 `ReferenceEquals(記住的, __instance)` 時才清除。
 
 ### 3.2 `MusicSelectProcess`
 
@@ -76,11 +93,28 @@
   - DX 的 ID 通常是 STD + 10000，有例外（Trust 695 / 11726），找不到時用曲名比對。
   - 要依使用者點的是哪一套決定 `ScoreType`。
 - 其他：
-  - `GameManager.SelectMusicID`、`SelectDifficultyID[]`
-  - `GamePlayManager`：分數、Combo、`CriticalNum`、`PerfectNum`、`GreatNum`、`GoodNum`、`MissNum`
+  - `GameManager`（靜態）：`SelectMusicID`、`SelectDifficultyID[]`、`CurrentDifficulty[]`、`IsInGame`、`MusicTrackNumber`（第幾首，可用來偵測換歌）
+  - `Notes.musicLevelID` → `DataManager.GetMusicLevel(id).levelNum`：顯示用等級（例如 `13+`）
+  - 宴會場判斷：`genreName.id == 107`；或 ID `>= 100000` 且 `utageKanjiName` 不是空的（或曲名以 `[` 開頭）。譜面在 `notesData[0]`，難度值 5
   - `Singleton<UserDataManager>.Instance.GetUserData(i).IsEntry`
   - `AssetManager.Instance().GetJacketTexture2D(name)` / `GetJacketThumbTexture2D(name)`：用資源名呼叫，int 版本會走被改寫的 `GetMusic`。
-- 圖片輸出：遊戲貼圖不可讀，要用 `RenderTexture` + `ReadPixels` + `EncodeToPNG`，全部在主執行緒做。
+  - 圖片輸出：遊戲貼圖不可讀，要用 `RenderTexture` + `ReadPixels` + `EncodeToPNG`，全部在主執行緒做。
+
+### 3.5 即時狀態（打歌 / 結算 / 計時）
+
+- **判定**：Postfix `JudgeResultSt.UpdateScore(int monitorIndex, NoteScore.EScoreType type, NoteJudge.ETiming timing)` → `NoteJudge.ConvertJudge(timing)` 回傳 `NoteJudge.JudgeBox`（Critical / Perfect / Great / Good / Miss）。每個音符都會經過，在主執行緒執行。
+- **譜面**：`NotesManager.Instance(player).GetSessionInfo()`（`musicId`、`difficulty` 0～4 = BASIC～Re:MASTER、5 = 宴會場、`notesData`）。
+- **進度**：靜態 `NotesManager.GetCurrentMsec()`、實例的 `getPlayFirstMsec()` / `getPlayFinalMsec()`（小寫 g）。
+- **分數**：`GamePlayManager.Instance.GetGameScore(player, -1)` → `GameScoreList`：`CriticalNum`、`PerfectNum`、`GreatNum`、`GoodNum`、`MissNum`、`Combo`、`MaxCombo`、`DxScore`、`IsEnable`（false = 該側沒在玩）、`SessionInfo`、`GetAchivement()`（原名拼錯）。
+- **結算**：`ResultProcess` 的私有欄位 `_gameScoreLists[p]`、`_userScores[p]`（`deluxscore`）、`_musicID`。`OnStart` 當下資料可能還沒填好，要之後幾幀重讀。
+- **畫面倒數**：`process.container.processManager._genericManager._timerController[0]` 的 `CountDownSecond`、`IsInfinity`。找不到時改找 `_timer`、`Monitors[0]`、`Context.GetCurrentState()`。
+- **版本**：`MAI2System.SystemConfig.Instance.config.displayVersionString`；備用 `config.romVersionInfo.versionNo.versionString`、`Manager.AmManager.Instance.VersionNo.versionString`。
+- **玩家**：`UserDataManager.GetUserData(i)` 的 `IsEntry`、`Detail.userName`；`Manager.NetDataManager.Instance.GetNetUserData(i)`。空字串、`GUEST`、「游客」都視為沒有名稱（先做 NFKC 正規化）。
+- **寫法**：
+  - 多個候選成員名稱、反射結果快取（`MethodInfo` 與整數索引器 `Item(int)`）。
+  - 非打歌畫面每 250～1000 毫秒讀一次。
+  - 用 `Stopwatch` 量慢路徑。
+  - 具名 `Semaphore` 防止重複載入。
 
 ## 4. 音效（CRI ADX2）
 
@@ -168,6 +202,7 @@
 - **`ServicePointManager`** 是整個程序共用的，網路下載交給外部程式。
 - **跨版本**：關鍵成員用反射加防呆，找不到就停用該功能；或用 SHA-256 標明支援的 DLL 版本。
 - **ADX 解出雜訊**：漏了 `& 0x1fff`。
+- **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`。照遊戲的拼法寫，不確定時兩種都試。
 
 ## 7. SongRequest（chidi0716/maimai-song-request-，v1.1.11）
 
@@ -200,5 +235,6 @@
 | AnswerSoundSwitch v1.1.0 | Hematemesis-V | `SoundCtrl.Play` 轉向第 6 號音效庫 |
 | DxPassCompat v2.4.0（說明檔標 v2.5） | ZCM-X | DX PASS 卡面、`9000000+` ID、`Traverse` |
 | MaiL2d v1.3.0 | Clansty / GPLv3 | Live2D 伙伴、負數 ID、`VOExtensions.Export`、AssetBundle、原生 DLL |
+| maimai-dghub-link v1.4.10 | XiaoLan9999 / GPLv3（只參考做法） | 判定入口、Process 一覽、倒數、版本、跨版本反射；沒有新的接入技術 |
 | murasame | 第三方 | MaiL2d 模型包 + 語音包（92 cue，47 個有聲音，HCA） |
 | AquaMai、MuNET、ComboWeb | — | 只被提到；前兩者會改寫曲目讀取 |
