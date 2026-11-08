@@ -1,6 +1,6 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`12`，工具在 `tools/cri/`。
+> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`13`，工具在 `tools/cri/`。
 > 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
@@ -282,7 +282,9 @@
 | murasame | 第三方 | MaiL2d 模型包 + 語音包（92 cue，47 個有聲音，HCA） |
 | NGO 銘牌包（NgoPlates v1.0.0） | TOTO / 無授權檔，發布者公開歡迎 fork | 選項包 `A588` 加銘牌、Track 條件自動解鎖、BC7 動態銘牌（`GetPlateTexture2D` + `CopyTexture`） |
 | maimai-ngo（換皮 + PartnerLive2D） | TOTO-git-q / 無授權檔，發布者公開歡迎 fork | UnityPy 改 `resources.assets`、十多個畫面入口、自訂搭檔、GC / 洩漏、amdaemon 按鍵 |
-| AquaMai、MuNET、ComboWeb | — | 只被提到；前兩者會改寫曲目讀取；AquaMai `LoadLocalImages` 可直讀 PNG |
+| MaiChartManager | MuNET-OSS / GPLv3（只參考做法） | 自製譜管理：一首歌的檔案組成、ID 規則、封面 AB 格式、ID 衝突、影片 / 音訊轉換、AquaMai 安裝與設定 |
+| AquaMai | MewoLab / Apache-2.0 | 原始碼公開；`LoadLocalImages`（直讀 PNG）、`MovieLoader`（MP4 PV）已讀；其他功能未逐一研究 |
+| MuNET、ComboWeb | — | 只被提到；MuNET 會改寫曲目讀取 |
 
 ## 9. 資源與選項包
 
@@ -302,7 +304,7 @@
 - **貼圖載入**：
   - `AssetManager.LoadAsset<T>(path)`：路徑轉小寫、去掉副檔名，查 bundle。
   - `GetPlateTexture2D(int)` → `(string)`，找不到用 `UI_Plate_000000`。Frame、Partner、Icon 同理。
-  - 直讀 PNG 要靠 AquaMai `[GameSystem.Assets.LoadLocalImages]`（未驗證，依 NGO 說明檔）。
+  - 直讀 PNG 要靠 AquaMai `[GameSystem.Assets.LoadLocalImages]`（原始碼已確認，見第 11 節）。
 - **動態銘牌（NgoPlates）**：
   - Postfix `GetPlateTexture2D(string)`（`HarmonyPriority(0)`），用正規式取 ID，換成自己的 `Texture2D`，之後每幀 `Graphics.CopyTexture` 換畫格。
   - 畫格是原始 BC7：720×116 一格 83,520 bytes，列由下往上，用 `LoadRawTextureData` 載入。
@@ -336,3 +338,29 @@
   - 功能票畫面按 C 會用掉票。
   - 強制結束會跳過上傳，成績會不見，要用 AquaMai `OneKeyEntryEnd`。
   - 假造帳號狀態上傳前要還原所有可能被改的欄位（含 `CharaSlot`）。
+
+## 11. 自製譜與選項包（MaiChartManager / AquaMai 原始碼）
+
+- **一首歌的檔案**（以 DX ID 11234、非 DX ID 1234 為例）：
+  - `A???\music\music011234\Music.xml` + `011234_00～05.ma2`
+  - `SoundData\music001234.acb/.awb`、`MovieData\001234.dat`（USM）
+  - `AssetBundleImages\jacket\ui_jacket_001234.ab`、`jacket_s\ui_jacket_001234_s.ab`
+  - 音訊、影片、封面都用**非 DX ID**（`ID % 10000`），STD / DX 共用。
+- **ID**：STD < 10000，DX = STD + 10000，宴會場 ≥ 100000。`movieName`、`cueName`、`artistName` 的 id 用非 DX ID。
+- **Music.xml 欄位**：
+  - 曲目：`name`、`sortName`、`artistName`、`genreName`、`AddVersion`、`version`、`bpm`、`longMusic`（1 = 吃 2 首）、`disable`
+  - 解鎖：`eventName` / `eventName2` / `subEventName`、`lockType` / `subLockType`
+  - 宴會場：`utageKanjiName`、`comment`、`utagePlayStyle`
+  - 譜面 `notesData/Notes` ×6：`file/path`、`level`、`levelDecimal`、`musicLevelID`、`maxNotes`、`isEnable`、`notesDesigner`
+  - 自製慣例：`eventName` 1、作者 / 譜師 id 999；未知節點（例 `X-MCM/`）遊戲會忽略。
+- **封面 AB**：官方 400×400 BC7。不用 Unity 也能自己寫 UnityFS（`2018.4.7f1`）RGBA32 Texture2D；container `assets/assetbundle/jacket/ui_jacket_<id>.png`（小封面 `jacket_s/..._s.png`）。長邊限 400，太大會掉幀。
+- **AquaMai `LoadLocalImages`**（預設開，`ImageAssetsDir` = `LocalAssets`）：
+  - 掃描：Prefix `DataManager.LoadMusicBase` 用 `____targetDirs` 拿選項包清單，掃各包 `AssetBundleImages\{jacket,frame,nameplate,framemask,framepattern,icon,chara,partner}`、`map\sprite\bg`、`Common\Sprites\Tab\Title` 的 png/jpg。
+  - 換圖：`TargetMethods` + Prefix 換掉 `AssetManager.Get{Jacket,JacketThumb,Plate,Frame,Icon…}Texture2D(string)`。
+  - 封面優先 `LocalAssets\<ID>.png`；`LocalAssets` 可以在根目錄和選項包裡，依檔名合併。
+  - 分類標題圖 `UI_CMN_TabTitle_<ID>` 是遊戲載入後再換的。掛泛型 `Resources.Load<Sprite>` 會黑屏，掛 `AssetBundleManager.LoadAsset` 會記憶體錯誤。
+- **AquaMai `MovieLoader`**：
+  - 播放順序：遊戲 PV（`.dat`）→ `MovieData\*.mp4` → 封面。
+  - 入口：`GameCtrl.Initialize`、`GameMonitor.SetMovieMaterial`、`MovieController.Play/GetMovieWidth/GetMovieHeight`。
+- **衝突**：不同選項包的同名 acb/awb/dat 後讀的勝出，選 ID 前要掃描全部 `A???`。
+- **A000 資料夾**（可被選項包覆蓋的資料種類）：music*、plate、title、icon、frame、partner、chara、charaAwake、map*、event、mission、course、challenge、class、udemae*、circle*、festa*、kaleidxScope*、pass*、shopItem*、ticket、loginBonus、hiddenItem、scoreRanking 等。完整清單見 docs/13。
