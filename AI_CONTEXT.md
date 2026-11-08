@@ -1,6 +1,6 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`09`，工具在 `tools/cri/`。
+> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`11`，工具在 `tools/cri/`。
 > 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
@@ -174,6 +174,14 @@
   - 語音：`SoundManager.GetPartnerVoiceCueName(voiceID)` 回傳 ACB 路徑。官方伙伴語音 ACB 有 92 個 cue（`VO_000080`～`VO_000254`），HCA；用 ACE 編輯，只刪 Track、不要刪 Cue。
   - 結算畫面的 `NavigationCharacter`（由 `ResultMonitor` 管理）。Animator 狀態：`Navi_Fun_Loop_02`（Clear）、`Navi_Fun_Start`（被觸摸）、`Navi_Sad_01`（未 Clear）。
   - MaiL2d 另外提供參數 `IsClear`（Postfix `ResultMonitor.SetStartData`）、`Random`（Prefix `TouchPartnerCharacter`）。
+  - maimai-ngo（PartnerLive2D）：
+    - 接管導航角色：`NavigationCharacter.Play(NavigationAnime, float)`，`NavigationAnime` = `Default`、`Welcom`、`FunStart`、`FunStartLoop`、`Sad01`。
+    - 結算畫面只換裝備中的搭檔（`UserDetail.EquipPartnerID`）。
+    - 搭檔房間：`PartnerRoom.CreatePartner(int)`。
+    - 收藏圖示：掛 `GetPartnerTexture2D(int)`（`(string)` 版本會被內聯）。
+    - 新搭檔：`A500\partner\partner<ID>\Partner.xml`（UTF-8 BOM、`isDefault` true）。新的 naviChara ID ≥ 29 沒有 Prefab，遊戲會退回原版角色，要用 `CanvasGroup` 藏起來。
+    - 遊戲沒有 Standard shader，只能用 `Sprites/Default`（要設 `_RendererColor`、`_Flip`）、`UI/Default`、Legacy Particles。
+- **不寫 Harmony 的加法**：收藏品直接放選項包 XML + 圖（見第 9 節），走遊戲正常的取得與上傳流程。
 - **DX PASS**：
   - `CodeReadProcess`（`GetUserCard`、`GetEnableUserCard`、`GetReadCard`、`GetCardTypeData`、`IsValidCard`、`IsInPeriod`）、`CodeReadMonitor.Scroll`、`ReadCardChainList.Deploy`（私有 `_readCardChainList`）。
   - `CardData.IsDisable` / `enableVersion`（舊卡不顯示 → 把 `StringID.id` 改成 12）、`UserData.CardList`。
@@ -202,7 +210,18 @@
 - **`ServicePointManager`** 是整個程序共用的，網路下載交給外部程式。
 - **跨版本**：關鍵成員用反射加防呆，找不到就停用該功能；或用 SHA-256 標明支援的 DLL 版本。
 - **ADX 解出雜訊**：漏了 `& 0x1fff`。
-- **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`。照遊戲的拼法寫，不確定時兩種都試。
+- **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`、`NavigationAnime.Welcom`。照遊戲的拼法寫，不確定時兩種都試。
+- **補丁不觸發**：小方法被 Mono JIT 內聯（`GetPartnerTexture2D(string)`、`InputManager.GetTouchPanelAreaDown`）。改掛呼叫端用的多載，或下一層較大的方法（`IO.TouchPanel.GameInputLog.TriggerOn`）。
+- **記憶體洩漏**：
+  - Boehm GC 沒有 ephemeron，`ConditionalWeakTable` 會強引用 key（每首 +50 MB）。改用 instance ID 字典，離開畫面時清掉。
+  - 每幀補丁讀 `Object.name`、組字串，會週期性卡頓。依 instance ID 快取。
+- **歌曲開始凍住**：淡出後 `GameProcess.OnStart` 又 `unloadUnusedAndGC` 一次。Prefix 略過 20 秒內的第二次。
+- **mod 裡模擬按鈕無效**：按鈕 / 刷卡在 amdaemon（segatools）讀。觸控可從 `GameInputLog.TriggerOn` 注入。
+- **隱藏店內匹配**：不能略過 `MusicSelectProcess.PartyExec`（NORMAL 模式 START 靠它）。改成 `SetConnectData` 後拿掉分類，`IsConnectStart` / `IsConnectStop` 回「沒變化」。
+- **改資源**：
+  - 改 Sprite `m_SortingLayer` 會崩潰，改材質 render queue。
+  - 白色遮罩貼圖別畫彩色，改顏色。
+  - 描邊網格會裁圖，改成整張四邊形或放大 `textureRect`。
 
 ## 7. SongRequest（chidi0716/maimai-song-request-，v1.1.11）
 
@@ -237,4 +256,59 @@
 | MaiL2d v1.3.0 | Clansty / GPLv3 | Live2D 伙伴、負數 ID、`VOExtensions.Export`、AssetBundle、原生 DLL |
 | maimai-dghub-link v1.4.10 | XiaoLan9999 / GPLv3（只參考做法） | 判定入口、Process 一覽、倒數、版本、跨版本反射；沒有新的接入技術 |
 | murasame | 第三方 | MaiL2d 模型包 + 語音包（92 cue，47 個有聲音，HCA） |
-| AquaMai、MuNET、ComboWeb | — | 只被提到；前兩者會改寫曲目讀取 |
+| NGO 銘牌包（NgoPlates v1.0.0） | TOTO / 無授權檔，發布者公開歡迎 fork | 選項包 `A588` 加銘牌、Track 條件自動解鎖、BC7 動態銘牌（`GetPlateTexture2D` + `CopyTexture`） |
+| maimai-ngo（換皮 + PartnerLive2D） | TOTO-git-q / 無授權檔，發布者公開歡迎 fork | UnityPy 改 `resources.assets`、十多個畫面入口、自訂搭檔、GC / 洩漏、amdaemon 按鍵 |
+| AquaMai、MuNET、ComboWeb | — | 只被提到；前兩者會改寫曲目讀取；AquaMai `LoadLocalImages` 可直讀 PNG |
+
+## 9. 資源與選項包
+
+- **選項包**（反編譯 `DataManager.GetDirs`）：
+  - 掃描範圍：`StreamingAssets\A???`（A + 3 位數字）排序後依序讀，再接 `AppImage.OptionMountRootPath\N???`。
+  - 覆蓋規則：XML 以 ID 為鍵、影片 / 音效以檔名為鍵、`AssetBundleImages\**\*.ab` 以相對路徑為鍵，都是**後讀的勝出**；`disable = true` 的條目會被移除。
+  - `DataConfig.xml` 取 version 最大的。
+  - 所以加內容 = 開一個新的 `Axxx`，不動原檔。
+- **收藏品 XML**：
+  - 路徑：`A???\plate\plate<ID 6 位>\Plate.xml`（同理 `partner`、`title`、`icon`、`frame`）。
+  - 欄位：`name.id`、`genre`、`isDefault`、`dispCond`（None / Lock）、`normText`、`eventName`、`relConds`。
+  - 銘牌圖名固定是 `NamePlate/UI_Plate_{id:D6}.png`（`LoadPlate` 覆寫，XML 的 `fileName` 沒用）。
+  - 收藏畫面只列出擁有的、`dispCond == None` 或 `disable` 的項目。
+- **打一首歌自動解鎖**：
+  - `eventName.id = 1`（無期限常時解放）+ `relConds.category = Track` + `kindTrack = DIFFICULTY`、`difficultyId = ANY`。
+  - 每首結束時 `NextTrackProcess` → `CollectionAchieve.CheckNewPlate` / `CheckNewTitle` …，只看 `EventManager.IsOpenEvent` 的事件。
+- **貼圖載入**：
+  - `AssetManager.LoadAsset<T>(path)`：路徑轉小寫、去掉副檔名，查 bundle。
+  - `GetPlateTexture2D(int)` → `(string)`，找不到用 `UI_Plate_000000`。Frame、Partner、Icon 同理。
+  - 直讀 PNG 要靠 AquaMai `[GameSystem.Assets.LoadLocalImages]`（未驗證，依 NGO 說明檔）。
+- **動態銘牌（NgoPlates）**：
+  - Postfix `GetPlateTexture2D(string)`（`HarmonyPriority(0)`），用正規式取 ID，換成自己的 `Texture2D`，之後每幀 `Graphics.CopyTexture` 換畫格。
+  - 畫格是原始 BC7：720×116 一格 83,520 bytes，列由下往上，用 `LoadRawTextureData` 載入。
+  - 背景執行緒讀檔，主執行緒每幀做幾張貼圖。
+  - Postfix `ProcessManager.AddProcess(ProcessBase, byte)` 看型別名稱切換狀態。
+- **直接改資源檔（maimai-ngo）**：
+  - 位置：UI 貼圖、Sprite、`Image` 顏色、Prefab、材質、粒子在 `Sinmai_Data\resources.assets`；導航角色、角色圖在 `A000\AssetBundleImages\*.ab`。
+  - 工具：UnityPy + `TypeTreeGenerator("2018.4.7f1")` + `load_local_dll_folder(Managed)`。讀遊戲資料夾那份；每個物件每次執行只改一次；先 `save()` 再寫 `.new`。
+  - 貼圖保持原名、原尺寸、原格式（BC7 用 etcpak 編碼、texture2ddecoder 解碼）。
+  - 發布：安裝器核對原值再寫新值，有備份、可解除安裝，repo 不放遊戲檔。
+- **執行期入口**：
+  - 畫面：`ProcessManager.AddProcess`。
+  - UI：`Image.OnEnable` / `OnPopulateMesh` / `sprite` setter、`TextMeshProUGUI.OnEnable`。
+  - 背景：`BGController.Awake`、`SubBGController.Initialize`。
+  - 其他：`PleaseWaitMonitor.SetTime`（自由模式時鐘）、`TrackStartProcess.OnStart`、`UserDataULProcess.OnStart`（`DataSave/Chara`）、`ResultTimelineManager.SetData`、`SoundManager.PreviewPlay`、`MusicSelectMonitor.ScrollMusicLeft/Right`。
+- **字型**：Unity 2018 不能從硬碟載 TTF，要寫進遊戲的 Font 物件。
+- **資源物件**：`Null_Selector_ColorBase._colors` 依難度索引，只有 index 7（分類藍）可改。
+
+## 10. 效能與測試
+
+- **GC 時機**（反編譯）：
+  - `SystemConfig.unloadUnusedAndGC` = `UnloadUnusedAssets` + `GC.Collect`，每次淡出都會跑。
+  - `GameProcess.OnStart` 再跑一次，然後 `GCMode = Disabled`；`OnRelease` 打開 GC 並 `Collect`。
+  - **打歌中沒有 GC**，卡頓集中在歌曲開始、淡入淡出、進結算。
+- **Mono Boehm GC**（NGO 實測）：不分代，heap 越大每次回收越慢。量法：每首歌記幀時間與 `GC.CollectionCount(0)`，每次清理記 `GC.GetTotalMemory`；20 首以上持平才算健康。
+- **按鍵**（NGO 實測）：
+  - 按鈕 / Test / Service / 刷卡由 amdaemon 的 `mai2hook.dll`、`hinata.dll` 以 `GetAsyncKeyState` 讀，且只在遊戲視窗在前景時才收。
+  - segatools 鍵位：Enter 按住 3 秒刷卡、`WEDCXZAQ` = 按鈕 1～8（C = 4 = 確認）、F1 Test、F2 Service、F3 投幣。
+- **測試注意**（NGO 實測）：
+  - 待機畫面只能刷卡，按其他按鈕會開始 GUEST。
+  - 功能票畫面按 C 會用掉票。
+  - 強制結束會跳過上傳，成績會不見，要用 AquaMai `OneKeyEntryEnd`。
+  - 假造帳號狀態上傳前要還原所有可能被改的欄位（含 `CharaSlot`）。
