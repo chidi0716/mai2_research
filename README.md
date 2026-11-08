@@ -25,6 +25,7 @@ maimai DX（`Sinmai.exe`）的 MelonLoader mod 研究筆記：遊戲環境、怎
 | [11 效能與測試](docs/11-效能與測試.md) | 遊戲的 GC 時機、Mono Boehm GC 與洩漏、量測方式、機台按鍵與模擬、測試注意事項 |
 | [12 玩法與系統](docs/12-玩法與系統.md) | 音符與判定、分數 / 達成率 / DX 分數公式、評級與 Rating（B35 + B15）、一次遊玩流程、地圖 / 夥伴 / 段位 / 對戰等長期系統 |
 | [13 自製譜與選項包管理](docs/13-自製譜與選項包管理.md) | 一首歌的檔案組成與 ID 規則、Music.xml 欄位、封面 AB 格式、AquaMai 直讀圖片 / MP4 PV、ID 衝突、A000 資料種類一覽 |
+| [14 AquaMai 功能與入口](docs/14-AquaMai功能與入口.md) | AquaMai 139 個功能的遊戲入口目錄、可借用的技巧（擴充 enum 表、判定誤差、暫停跳轉、全場景換圖）、Maimoller LED、選項包路徑、和自己的 mod 並用的注意事項 |
 | [tools/cri](tools/cri/README.md) | 解析 ACB、解密 ADX、解碼 HCA、產生音效試聽頁的工具 |
 
 ## 快速重點

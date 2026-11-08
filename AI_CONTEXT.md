@@ -1,6 +1,6 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`13`，工具在 `tools/cri/`。
+> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`14`，工具在 `tools/cri/`。
 > 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
@@ -289,7 +289,7 @@
 ## 9. 資源與選項包
 
 - **選項包**（反編譯 `DataManager.GetDirs`）：
-  - 掃描範圍：`StreamingAssets\A???`（A + 3 位數字）排序後依序讀，再接 `AppImage.OptionMountRootPath\N???`。
+  - 掃描範圍：`StreamingAssets\A???`（A + 3 位數字）排序後依序讀，再接 `AppImage.OptionMountRootPath\N???`（AquaMai `OptionLoadFix` 把這個路徑改成 `StreamingAssets`）。
   - 覆蓋規則：XML 以 ID 為鍵、影片 / 音效以檔名為鍵、`AssetBundleImages\**\*.ab` 以相對路徑為鍵，都是**後讀的勝出**；`disable = true` 的條目會被移除。
   - `DataConfig.xml` 取 version 最大的。
   - 所以加內容 = 開一個新的 `Axxx`，不動原檔。
@@ -364,3 +364,18 @@
   - 入口：`GameCtrl.Initialize`、`GameMonitor.SetMovieMaterial`、`MovieController.Play/GetMovieWidth/GetMovieHeight`。
 - **衝突**：不同選項包的同名 acb/awb/dat 後讀的勝出，選 ID 前要掃描全部 `A???`。
 - **A000 資料夾**（可被選項包覆蓋的資料種類）：music*、plate、title、icon、frame、partner、chara、charaAwake、map*、event、mission、course、challenge、class、udemae*、circle*、festa*、kaleidxScope*、pass*、shopItem*、ticket、loginBonus、hiddenItem、scoreRanking 等。完整清單見 docs/13。
+
+## 12. AquaMai 功能與入口（原始碼，詳見 docs/14）
+
+- **規模**：139 個設定段，每段是一個功能 + 它掛的遊戲方法。想做的功能先查 AquaMai 有沒有。
+- **跟本知識庫相關**：
+  - `OptionLoadFix`（預設開）：Prefix `AppImage.OptionMountRootPath` → `StreamingAssets`，Postfix `DataManager.GetDirs` 去重。
+  - `HideSelfMadeCharts`：Postfix `DataManager.GetMusics`，用 `StackTrace` 只在 `MusicSelectProcess` 呼叫時過濾。官方包 = 資料夾有 `DataConfig.xml` 或 `OfficialChartsMark.txt`。
+  - `MaimollerIO`：Prefix `Bd15070_4IF._setColor/_setColorMulti/_setColorFet…` 轉成 Maimoller HID（`Led1p/2p` 預設 true），所以 `MechaManager.LedIf[p].SetColor` 在 Maimoller 上應該會亮（未實測）。
+- **技巧**：
+  - 擴充 enum 表：Prefix `DB.SortTabIDEnum` 的 `GetEnd/IsValid/GetName/GetDetail/GetFilePath/GetEnumName/GetEnumValue`，再改 `MusicSelectProcess.AddSort/CategoryTabSort`；上傳前 Postfix `VOExtensions.Export(UserExtend)` 把自訂值換回去（`SongConstantSort`）。
+  - 判定誤差：Postfix `NoteBase.Judge` / `HoldNote.JudgeHoldHead` 讀 `___JudgeTimingDiffMsec`，扣掉 `UserOption.GetJudgeTimingFrame() × 16.6667`（`UnstableRate`）。
+  - 暫停 / 跳轉：1.70 沒有 `GameProcess.debugFeature`，靠 polyfill 改 `NotesManager.UpdateTimer`、`MovieController.Pause/SetSeekFrame`；目前時間 = `NotesManager.GetCurrentMsec() - 91`（`PracticeMode`）。
+  - 全場景換圖：Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable` 依名稱替換（`ResourcesOverride`，標危險）。
+  - 跨版本欄位：`_beforeCategorySortSetting`（版本號 ≥ 26500）/ `_categorySortSetting`。
+- **注意**：AquaMai 的 Prefix 回 `false` 時原方法不會跑（其他 Prefix 是否照跑依 HarmonyX 行為，未驗證）；自己的補丁盡量用 Postfix。
