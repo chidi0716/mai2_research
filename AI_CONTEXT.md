@@ -138,7 +138,7 @@
 - **畫面倒數**：`process.container.processManager._genericManager._timerController[0]` 的 `CountDownSecond`、`IsInfinity`。找不到時改找 `_timer`、`Monitors[0]`、`Context.GetCurrentState()`。
 - **版本**：`MAI2System.SystemConfig.Instance.config.displayVersionString`；備用 `config.romVersionInfo.versionNo.versionString`、`Manager.AmManager.Instance.VersionNo.versionString`。
 - **玩家**：`UserDataManager.GetUserData(i)` 的 `IsEntry`、`Detail.userName`；`Manager.NetDataManager.Instance.GetNetUserData(i)`。空字串、`GUEST`、「游客」都視為沒有名稱（先做 NFKC 正規化）。
-- **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。Maimoller 靠 AquaMai `MaimollerIO` 轉送，應該會亮（未實測）。
+- **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。Maimoller 靠 AquaMai `MaimollerIO` 轉送，應該會亮（未實測）。**判定燈是原版就有的**：私有 `JudgeGrade.DispLed(ETiming)` → `SetColorButtonPressed`，Good 綠、Great 紅、Perfect / Critical 黃、Miss 不亮；結算燈效在 `GameResultEffectCtrl`。
 - **自動播放**：`GameManager.IsAutoPlay()`、`AutoJudge()`；`SystemConfig.config.IsAutoPlay` / `IsDebugDisp` / `IsAllOpen`。
 - **選項**：`DB.Option*IDEnum`（`Notespeed`、`Mirror`、`Judgetiming`、`Breakse`、`TapSuccessSe`、`Dispjudge`、`Trackskip`…），用 `GetValue()` 取值。
 - **只確認存在**：拍照（`PhotoEditProcess`、`WebCamManager`）、段位（`Process.CourseSelect/Prepare/Result`）、`GhostResult`、`CircleFinalResult`、`LoginBonus`、`SplitFlapDisplay`、`CustomNote`、`PartyLink`。
