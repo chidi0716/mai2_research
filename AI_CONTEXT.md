@@ -1,6 +1,6 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`11`，工具在 `tools/cri/`。
+> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`12`，工具在 `tools/cri/`。
 > 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
@@ -116,7 +116,23 @@
   - 用 `Stopwatch` 量慢路徑。
   - 具名 `Semaphore` 防止重複載入。
 
-### 3.6 其他系統（1.70）
+### 3.6 計分規則（反編譯 1.70）
+
+- **判定**：15 段（`NoteJudge.ETiming`：TooFast、FastGood、FastGreat3rd/2nd/1st、FastPerfect2nd/1st、Critical、Late…、TooLate）。
+- **基礎分**（`NoteScore`）：Tap / Touch 500、Hold 1000、Slide 1500、Break 2500（權重 1:2:3:5）；Great 80%、Good 50%。Break 的 Great 分三段：2000 / 1500 / 1250。
+- **Break 加分**：Critical 100、Perfect 75 / 50、Great 40、Good 30。
+- **達成率** = 基礎分 / 理論值 × 100 + Break 加分 / 理論值 × 1，最高 101%。
+- **DX 分數**：理論值 = 音符數 × 3；星星門檻 85 / 90 / 93 / 95 / 97%（`DeluxcorerankrateIDEnum`）。
+- **評級**：S 97、S+ 98、SS 99、SS+ 99.5、SSS 100、SSS+ 100.5。
+- **單曲 Rating**（`UserRate`）= ⌊(level×10 + levelDecimal) × min(達成率×10000, 1005000) × 係數 / 10⁸⌋ + AP 加分 1（`ApBonusTable`）。係數 × 10：SSS+ 224、SSS 216、SS+ 211、SS 208、S+ 203、S 200（`RatingTableIDEnum`）。
+- **總 Rating** = 舊曲 B35（`RatingList`）+ 新曲 B15（`NewRatingList`），用 `romVersion < 26500` 區分新舊。
+- **周邊系統**（見 docs/12）：
+  - 收集與成長：旅行地圖（`MapData`、`MapMaster`）、夥伴（`CharaData`、覺醒 `CharaAwakeData`）、搭檔親密度（`PartnerClosenessData`）。
+  - 挑戰：段位（`CourseData`）、友人對戰（`UdemaeData`、`Vsghostnpc`）、完美挑戰（`ChallengeData`、`Kaleidxscope` 生命值）。
+  - 1.70 新增：CiRCLE 點數與班級（`CircleClass`）、MAGiCAL PASS（`MagicalpassIDEnum`）。
+  - 其他：任務（`MissionData`）、拍照（`PhotoEditProcess`）。
+
+### 3.7 其他系統（1.70）
 
 - **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。模擬器 / Maimoller 上會不會亮：未驗證。
 - **自動播放**：`GameManager.IsAutoPlay()`、`AutoJudge()`；`SystemConfig.config.IsAutoPlay` / `IsDebugDisp` / `IsAllOpen`。
