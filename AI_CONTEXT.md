@@ -1,10 +1,29 @@
 # AI_CONTEXT：maimai DX（Sinmai.exe）MelonLoader mod 知識濃縮
 
-> 給 AI 一次讀完用的單檔摘要。詳細說明與範例在 `docs/01`～`14`，工具在 `tools/cri/`。
-> 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版），不同版本可能不同；不確定時先反編譯確認。
+> 給 AI 一次讀完用的單檔摘要。**第 N 節對應 `docs/NN-*.md`**，細節與範例在那裡；工具在 `tools/cri/`。
+> 名稱來自反編譯 `Assembly-CSharp.dll`（約 1.65～1.70 版，主要是 SDEZ 1.70），不同版本可能不同；不確定時先反編譯確認。
 > 規則：不要把遊戲檔案（DLL、音效、圖片）放進公開 repo。
 
-## 1. 環境
+## 1. 遊戲與玩法（反編譯 1.70）
+
+- **操作**：圓形觸控螢幕 + 外圈 8 顆按鈕。音符：Tap、Hold、Slide（星星）、Touch / Touch Hold、Break；EX 是發亮標記（`NotesTypeID.Def.ExTap/ExHold/ExSlide/ExBreakTap`）。難度 BASIC～Re:MASTER + 宴會場，同一首歌通常有 STD / DX 兩套。
+- **判定**：15 段（`NoteJudge.ETiming`：TooFast、FastGood、FastGreat3rd/2nd/1st、FastPerfect2nd/1st、Critical、Late…、TooLate）。
+- **基礎分**（`NoteScore`）：Tap / Touch 500、Hold 1000、Slide 1500、Break 2500（權重 1:2:3:5）；Great 80%、Good 50%。Break 的 Great 分三段：2000 / 1500 / 1250。
+- **Break 加分**：Critical 100、Perfect 75 / 50、Great 40、Good 30。
+- **達成率** = 基礎分 / 理論值 × 100 + Break 加分 / 理論值 × 1，最高 101%。
+- **DX 分數**：理論值 = 音符數 × 3；星星門檻 85 / 90 / 93 / 95 / 97%（`DeluxcorerankrateIDEnum`）。
+- **連擊旗標**（`PlayComboflagID`）：None、Silver（FC）、Gold（FC+）、AllPerfect、AllPerfectPlus。
+- **評級**：S 97、S+ 98、SS 99、SS+ 99.5、SSS 100、SSS+ 100.5。
+- **單曲 Rating**（`UserRate`）= ⌊(level×10 + levelDecimal) × min(達成率×10000, 1005000) × 係數 / 10⁸⌋ + AP 加分 1（`ApBonusTable`）。係數 × 10：SSS+ 224、SSS 216、SS+ 211、SS 208、S+ 203、S 200（`RatingTableIDEnum`）。例：14.5 打 SSS+ = 326。
+- **總 Rating** = 舊曲 B35（`RatingList`）+ 新曲 B15（`NewRatingList`），用 `romVersion < 26500` 區分新舊。
+- **周邊系統**：
+  - 收集與成長：旅行地圖（`MapData`、`MapMaster`）、夥伴（`CharaData`、覺醒 `CharaAwakeData`）、搭檔親密度（`PartnerClosenessData`）、收藏品。
+  - 挑戰：段位（`CourseData`）、友人對戰（`UdemaeData`、`Vsghostnpc`）、完美挑戰（`ChallengeData`、`Kaleidxscope` 生命值）。
+  - 1.70（MAGiCAL）：CiRCLE 點數與班級（`CircleClass`）、MAGiCAL PASS（`MagicalpassIDEnum`）。
+  - 其他：任務（`MissionData`）、拍照（`PhotoEditProcess`）。
+  - 距離、覺醒、對戰勝負公式未研究。
+
+## 2. 環境與 MelonLoader
 
 - `Package\Sinmai.exe`：Unity **2018.4.7f1**、**Mono**（不是 IL2CPP）、x64。
 - 遊戲邏輯：`Package\Sinmai_Data\Managed\Assembly-CSharp.dll`，可用 ILSpy / `ilspycmd -p -o out -r Managed -r MelonLoader/net35 Assembly-CSharp.dll` 反編譯。
@@ -22,12 +41,12 @@
 - 骨架：`[assembly: MelonInfo(typeof(Mod), name, ver, author)]`、`[assembly: MelonGame("sega-interactive", "Sinmai")]`；`MelonMod` 的 `OnInitializeMelon`（設定、Harmony）、`OnLateInitializeMelon`（起伺服器等）、`OnUpdate`（主執行緒每幀）、`OnApplicationQuit`。
 - 資源可用 `EmbeddedResource` 內嵌進 DLL。
 
-## 2. 接入方式
+## 3. 接入方式
 
 - **Harmony**（主要）：MelonLoader 自動套用組件內所有 `[HarmonyPatch]`。自己控制：`[assembly: HarmonyDontPatchAll]` + `HarmonyInstance.PatchAll(typeof(X))`；`new HarmonyLib.Harmony(id).PatchAll(asm)`；`harmony.Patch(method, prefix, postfix, transpiler, finalizer)`（可依設定決定掛不掛）。
 - 跨版本容錯：`AccessTools.TypeByName("Process.X")` + `AccessTools.Method` + `harmony.Patch`，找不到就略過；不要用 `[HarmonyPatch(typeof(X))]` 寫死可能不存在的型別。Postfix 的 `__instance` 宣告成 `object`，同一個 Postfix 就能掛在多個 Process 上。原方法參數可以用同名或位置 `__0`、`__1` 注入。
 - 補丁類型：Prefix（回 `false` 略過原方法；改參數 / `ref __result`）、Postfix（讀 / 改結果）、Finalizer（`Exception __exception`，回 `null` 吞掉例外）、Transpiler（改 IL，少用）。
-- 指定目標：`[HarmonyPatch(typeof(X), "M", typeof(int))]` 指定多載；getter 用 `MethodType.Getter` 或 `"get_Prop"`。
+- 指定目標：`[HarmonyPatch(typeof(X), "M", typeof(int))]` 指定多載；getter 用 `MethodType.Getter` 或 `"get_Prop"`；一次掛多個方法用 `TargetMethods()`。
 - 讀寫私有成員：
   - 參數注入：`__instance`、`___欄位名`。欄位本身以 `_` 開頭時是**四個底線**，例如 `____combineMusicDataList`。
   - `AccessTools.FieldRefAccess<T, F>("_field")`：最快、有型別。
@@ -36,33 +55,20 @@
   - 一般反射。
 - **執行緒**：碰 Unity / 遊戲物件只能在主執行緒（`OnUpdate`）。`Application.dataPath`、`FindObjectOfType`、`Time` 也算。外部執行緒只排隊。
 - **就緒門控**：`Singleton<Manager.DataManager>.Instance.IsLoaded()` 之前不要碰遊戲物件。否則可能登入時閃退（`PlInformationProcess.RestoreGhost` 空參考）。
-- **協程**：借遊戲的 `MonoBehaviour`（例如某個 Monitor）呼叫 `StartCoroutine`；`yield return null` 等一幀。
-- **輸入**：`UnityEngine.Input.GetKeyDown(KeyCode.F8)`（需參考 `InputLegacyModule`）；機台按鈕走遊戲 `InputManager`（`ButtonSetting.Button04`…）。
+- **協程**：借遊戲的 `MonoBehaviour`（例如某個 Monitor）呼叫 `StartCoroutine`，或用 `MelonCoroutines.Start`；`yield return null` 等一幀。
+- **輸入**：`UnityEngine.Input.GetKeyDown(KeyCode.F8)`（需參考 `InputLegacyModule`）；機台按鈕走遊戲 `InputManager`（`ButtonSetting.Button04`…）。機台按鈕本身是 amdaemon 讀的，見第 10 節。
+- **和 AquaMai 並用**：它已掛很多方法，自己的補丁盡量用 Postfix（見第 11 節）。
 
-## 3. 遊戲結構
+## 4. 遊戲內部結構
 
-### 3.1 Process / Monitor
+### 4.1 Process / Monitor
 
 - 流程由 Process 組成（`MusicSelectProcess`、`PlInformationProcess`、`CodeReadProcess`…），命名空間是全域的 `Process`。
 - 每個玩家一個 Monitor（`MusicSelectMonitor`…，命名空間 `Monitor`）。
-- `MusicSelectProcess.OnStart` / `OnRelease` 會**按玩家數各觸發一次**，記得去重。
-- Process 一覽（`OnStart` / `OnRelease` Postfix 可得知目前畫面）：
-  - `Process.AdvertiseProcess`、`Process.AdvertiseCommercial.AdvertiseCommercialProcess`（待機）
-  - `Process.EntryProcess`（登入）
-  - `Process.PlInformationProcess`、`Process.InformationProcess`（資訊）
-  - `Process.GetPresentProcess`（禮物）
-  - `Process.ModeSelect.ModeSelectProcess`（模式選擇）
-  - `Process.RegionalSelectProcess`（地圖）
-  - `Process.CharacterSelectProces`（角色選擇；**原名少一個 s**）
-  - `Process.TicketSelect.TicketSelectProcess`（功能票）
-  - `Process.MusicSelectProcess`（選曲）
-  - `Process.MusicSelectInfoProcess`、`Process.GetMusicProcess`（讀取）
-  - 打歌中：用 `GameManager.IsInGame` 判斷
-  - `Process.ResultProcess`（結算）
-  - `Process.CodeReadProcess`（DX PASS）
-- `OnRelease` 只在 `ReferenceEquals(記住的, __instance)` 時才清除。
+- `MusicSelectProcess.OnStart` / `OnRelease` 會**按玩家數各觸發一次**，記得去重；`OnRelease` 只在 `ReferenceEquals(記住的, __instance)` 時才清除。
+- 換畫面的統一入口：Postfix `ProcessManager.AddProcess(ProcessBase, byte)`。
 
-### 3.2 `MusicSelectProcess`
+### 4.2 `MusicSelectProcess`
 
 - SubSequence：0 Music、1 Genre、2 SortSetting、3 Difficulty、4 UtageDifficulty、5 Menu、6 Option、7 Character。
 - 成員：
@@ -74,10 +80,11 @@
   - 私有 `SyncNext(SubSequence)`（所有玩家一起切子畫面，並記住前一個）
   - `SetInputLockInfo(p, ms)`、`IsInputLocking(p)`
   - `IsUtageMusicFolder()`、`IsGhostFolder(p)`、`IsConnectionFolder()`、`IsChallengeFolder()`、`IsTournamentFolder()`、`IsExtraFolder(p)`
-- 私有欄位：`_subSequenceArray`（`SequenceBase[][]`）、`_currentPlayerSubSequence`、`_beforePlayerSubSequence`、`_mainSequence`、`_combineMusicDataList`。
+- 私有欄位：`_subSequenceArray`（`SequenceBase[][]`）、`_currentPlayerSubSequence`、`_beforePlayerSubSequence`、`_mainSequence`、`_combineMusicDataList`；排序設定 `_beforeCategorySortSetting`（版本號 ≥ 26500）/ `_categorySortSetting`。
 - 遊戲自己的確認選曲流程：`monitor.ChangeButtonImage(Button04, 14)` → `SetScrollMusicCard(false)` → `OutGenreTab()` → `SetInputLockInfo(p, 1200f)` → `SyncNext(Difficulty 或 UtageDifficulty)`。
+- **人氣排行榜（みんなの人気楽曲 / POPULAR，genre 2）**：`registerMusic` 只在有已登入玩家 `Detail.HighestRating < 4000` 時才建立（SDEZ 1.70 IL 與實測已確認，2P 加 GUEST 就出現；數字寫在程式裡、等於黃色 Rating 門檻，沒有設定可改，只能 Harmony；外面機台行為不同，原因未查明）。排行資料來自 `MusicRankingManager`（伺服器下發，否則用 `DataManager.GetMusicOffRankings()`）。
 
-### 3.3 `CombineMusicSelectData`
+### 4.3 `CombineMusicSelectData`
 
 - `msDetailData.musicId`
 - `musicSelectData[0|1].MusicData`（STD / DX）
@@ -85,10 +92,10 @@
 - `isExistsScore`（1.70 是 `List<bool>`）
 - `isRandomScore`
 
-### 3.4 資料
+### 4.4 資料
 
 - `DataManager`：
-  - 公開的 `GetMusics()` / `GetMusic(id)` 常被其他 mod（AquaMai、MuNET）改寫，結果可能不完整。要全量時讀私有 `_musics` 或選曲列表。
+  - 公開的 `GetMusics()` / `GetMusic(id)` 常被其他 mod（AquaMai `HideSelfMadeCharts`、MuNET）改寫，結果可能不完整。要全量時讀私有 `_musics` 或選曲列表。
   - 載入前的內部表是非 null 的空佔位表（`CreateDummyTable`）。
   - 其他方法：`GetMusicGenre`、`GetUdemaeBoss`（可能回 null 導致閃退）、`GetPartners()`（`Safe.ReadonlySortedDictionary<int, PartnerData>`）。
 - `MusicData`：`GetID()`、`name.str`、`artistName.str`、`genreName`、`bpm`、`AddVersion.str`、`notesData`、`IsDisable()` / `disable`、`jacketFile`、`thumbnailName`。
@@ -103,70 +110,128 @@
   - `GameManager`（靜態）：`SelectMusicID`、`SelectDifficultyID[]`、`CurrentDifficulty[]`、`IsInGame`、`MusicTrackNumber`（第幾首，可用來偵測換歌）
   - `Notes.musicLevelID` → `DataManager.GetMusicLevel(id).levelNum`：顯示用等級（例如 `13+`）
   - 宴會場判斷：`genreName.id == 107`；或 ID `>= 100000` 且 `utageKanjiName` 不是空的（或曲名以 `[` 開頭）。譜面在 `notesData[0]`，難度值 5
-  - `Singleton<UserDataManager>.Instance.GetUserData(i).IsEntry`
+  - `Singleton<UserDataManager>.Instance.GetUserData(i).IsEntry`；`Detail.HighestRating`（到過的最高 Rating）
   - `AssetManager.Instance().GetJacketTexture2D(name)` / `GetJacketThumbTexture2D(name)`：用資源名呼叫，int 版本會走被改寫的 `GetMusic`。
   - 圖片輸出：遊戲貼圖不可讀，要用 `RenderTexture` + `ReadPixels` + `EncodeToPNG`，全部在主執行緒做。
 
-### 3.5 即時狀態（打歌 / 結算 / 計時）
+## 5. 遊戲流程與即時狀態
 
-- **判定**：Postfix `JudgeResultSt.UpdateScore(int monitorIndex, NoteScore.EScoreType type, NoteJudge.ETiming timing)` → `NoteJudge.ConvertJudge(timing)` 回傳 `NoteJudge.JudgeBox`（Critical / Perfect / Great / Good / Miss）。每個音符都會經過，在主執行緒執行。
+- Process 一覽（`OnStart` / `OnRelease` Postfix 可得知目前畫面）：
+  - `Process.AdvertiseProcess`、`Process.AdvertiseCommercial.AdvertiseCommercialProcess`（待機）
+  - `Process.EntryProcess`（登入）
+  - `Process.PlInformationProcess`、`Process.InformationProcess`（資訊）
+  - `Process.GetPresentProcess`（禮物）
+  - `Process.ModeSelect.ModeSelectProcess`（模式選擇）
+  - `Process.RegionalSelectProcess`（地圖）
+  - `Process.CharacterSelectProces`（角色選擇；**原名少一個 s**）
+  - `Process.TicketSelect.TicketSelectProcess`（功能票）
+  - `Process.MusicSelectProcess`（選曲）
+  - `Process.MusicSelectInfoProcess`、`Process.GetMusicProcess`（讀取）
+  - `Process.GameProcess`（打歌中；也可用 `GameManager.IsInGame` 判斷）
+  - `Process.ResultProcess`（結算）、`NextTrackProcess`、`MapResultProcess`、`UserDataULProcess`（上傳）
+  - `Process.CodeReadProcess`（DX PASS）
+- **判定**：Postfix `JudgeResultSt.UpdateScore(int monitorIndex, NoteScore.EScoreType type, NoteJudge.ETiming timing)` → `NoteJudge.ConvertJudge(timing)` 回傳 `NoteJudge.JudgeBox`（Critical / Perfect / Great / Good / Miss）。每個音符都會經過，在主執行緒執行。精確誤差（毫秒）見第 11 節 `UnstableRate`。
 - **譜面**：`NotesManager.Instance(player).GetSessionInfo()`（`musicId`、`difficulty` 0～4 = BASIC～Re:MASTER、5 = 宴會場、`notesData`）。
 - **進度**：靜態 `NotesManager.GetCurrentMsec()`、實例的 `getPlayFirstMsec()` / `getPlayFinalMsec()`（小寫 g）。
-- **分數**：`GamePlayManager.Instance.GetGameScore(player, -1)` → `GameScoreList`：`CriticalNum`、`PerfectNum`、`GreatNum`、`GoodNum`、`MissNum`、`Combo`、`MaxCombo`、`DxScore`、`IsEnable`（false = 該側沒在玩）、`SessionInfo`、`GetAchivement()`（原名拼錯）。
+- **分數**：`GamePlayManager.Instance.GetGameScore(player, -1)` → `GameScoreList`：`CriticalNum`、`PerfectNum`、`GreatNum`、`GoodNum`、`MissNum`、`Combo`、`MaxCombo`、`DxScore`、`TheoryDxScore`、`IsEnable`（false = 該側沒在玩）、`SessionInfo`、`GetAchivement()`（原名拼錯）。
 - **結算**：`ResultProcess` 的私有欄位 `_gameScoreLists[p]`、`_userScores[p]`（`deluxscore`）、`_musicID`。`OnStart` 當下資料可能還沒填好，要之後幾幀重讀。
 - **畫面倒數**：`process.container.processManager._genericManager._timerController[0]` 的 `CountDownSecond`、`IsInfinity`。找不到時改找 `_timer`、`Monitors[0]`、`Context.GetCurrentState()`。
 - **版本**：`MAI2System.SystemConfig.Instance.config.displayVersionString`；備用 `config.romVersionInfo.versionNo.versionString`、`Manager.AmManager.Instance.VersionNo.versionString`。
 - **玩家**：`UserDataManager.GetUserData(i)` 的 `IsEntry`、`Detail.userName`；`Manager.NetDataManager.Instance.GetNetUserData(i)`。空字串、`GUEST`、「游客」都視為沒有名稱（先做 NFKC 正規化）。
+- **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。Maimoller 靠 AquaMai `MaimollerIO` 轉送，應該會亮（未實測）。
+- **自動播放**：`GameManager.IsAutoPlay()`、`AutoJudge()`；`SystemConfig.config.IsAutoPlay` / `IsDebugDisp` / `IsAllOpen`。
+- **選項**：`DB.Option*IDEnum`（`Notespeed`、`Mirror`、`Judgetiming`、`Breakse`、`TapSuccessSe`、`Dispjudge`、`Trackskip`…），用 `GetValue()` 取值。
+- **只確認存在**：拍照（`PhotoEditProcess`、`WebCamManager`）、段位（`Process.CourseSelect/Prepare/Result`）、`GhostResult`、`CircleFinalResult`、`LoginBonus`、`SplitFlapDisplay`、`CustomNote`、`PartyLink`。
 - **寫法**：
   - 多個候選成員名稱、反射結果快取（`MethodInfo` 與整數索引器 `Item(int)`）。
   - 非打歌畫面每 250～1000 毫秒讀一次。
   - 用 `Stopwatch` 量慢路徑。
   - 具名 `Semaphore` 防止重複載入。
 
-### 3.6 計分規則（反編譯 1.70）
+## 6. 選項包與資料檔
 
-- **判定**：15 段（`NoteJudge.ETiming`：TooFast、FastGood、FastGreat3rd/2nd/1st、FastPerfect2nd/1st、Critical、Late…、TooLate）。
-- **基礎分**（`NoteScore`）：Tap / Touch 500、Hold 1000、Slide 1500、Break 2500（權重 1:2:3:5）；Great 80%、Good 50%。Break 的 Great 分三段：2000 / 1500 / 1250。
-- **Break 加分**：Critical 100、Perfect 75 / 50、Great 40、Good 30。
-- **達成率** = 基礎分 / 理論值 × 100 + Break 加分 / 理論值 × 1，最高 101%。
-- **DX 分數**：理論值 = 音符數 × 3；星星門檻 85 / 90 / 93 / 95 / 97%（`DeluxcorerankrateIDEnum`）。
-- **評級**：S 97、S+ 98、SS 99、SS+ 99.5、SSS 100、SSS+ 100.5。
-- **單曲 Rating**（`UserRate`）= ⌊(level×10 + levelDecimal) × min(達成率×10000, 1005000) × 係數 / 10⁸⌋ + AP 加分 1（`ApBonusTable`）。係數 × 10：SSS+ 224、SSS 216、SS+ 211、SS 208、S+ 203、S 200（`RatingTableIDEnum`）。
-- **總 Rating** = 舊曲 B35（`RatingList`）+ 新曲 B15（`NewRatingList`），用 `romVersion < 26500` 區分新舊。
-- **周邊系統**（見 docs/12）：
-  - 收集與成長：旅行地圖（`MapData`、`MapMaster`）、夥伴（`CharaData`、覺醒 `CharaAwakeData`）、搭檔親密度（`PartnerClosenessData`）。
-  - 挑戰：段位（`CourseData`）、友人對戰（`UdemaeData`、`Vsghostnpc`）、完美挑戰（`ChallengeData`、`Kaleidxscope` 生命值）。
-  - 1.70 新增：CiRCLE 點數與班級（`CircleClass`）、MAGiCAL PASS（`MagicalpassIDEnum`）。
-  - 其他：任務（`MissionData`）、拍照（`PhotoEditProcess`）。
+- **選項包**（反編譯 `DataManager.GetDirs`）：
+  - 掃描範圍：`StreamingAssets\A???`（A + 3 位數字）排序後依序讀，再接 `AppImage.OptionMountRootPath\N???`（AquaMai `OptionLoadFix` 把這個路徑改成 `StreamingAssets`）。
+  - 覆蓋規則：XML 以 ID 為鍵、影片 / 音效以檔名為鍵、`AssetBundleImages\**\*.ab` 以相對路徑為鍵，都是**後讀的勝出**；`disable = true` 的條目會被移除。
+  - `DataConfig.xml` 取 version 最大的。官方包 = 有 `DataConfig.xml` 或 `OfficialChartsMark.txt`（AquaMai 的判斷）。
+  - 所以加內容 = 開一個新的 `Axxx`，不動原檔。
+- **A000 資料夾**（可被選項包覆蓋的資料種類）：music*、plate、title、icon、frame、partner、chara、charaAwake、map*、event、mission、course、challenge、class、udemae*、circle*、festa*、kaleidxScope*、pass*、shopItem*、ticket、loginBonus、hiddenItem、scoreRanking 等。完整清單見 docs/06。
+- **一首歌的檔案**（以 DX ID 11234、非 DX ID 1234 為例）：
+  - `A???\music\music011234\Music.xml` + `011234_00～05.ma2`
+  - `SoundData\music001234.acb/.awb`、`MovieData\001234.dat`（USM）
+  - `AssetBundleImages\jacket\ui_jacket_001234.ab`、`jacket_s\ui_jacket_001234_s.ab`
+  - 音訊、影片、封面都用**非 DX ID**（`ID % 10000`），STD / DX 共用。
+- **ID**：STD < 10000，DX = STD + 10000，宴會場 ≥ 100000。`movieName`、`cueName`、`artistName` 的 id 用非 DX ID。
+- **Music.xml 欄位**：
+  - 曲目：`name`、`sortName`、`artistName`、`genreName`、`AddVersion`、`version`、`bpm`、`longMusic`（1 = 吃 2 首）、`disable`
+  - 解鎖：`eventName` / `eventName2` / `subEventName`、`lockType` / `subLockType`
+  - 宴會場：`utageKanjiName`、`comment`、`utagePlayStyle`
+  - 譜面 `notesData/Notes` ×6：`file/path`、`level`、`levelDecimal`、`musicLevelID`、`maxNotes`、`isEnable`、`notesDesigner`
+  - 自製慣例：`eventName` 1、作者 / 譜師 id 999；未知節點（例 `X-MCM/`）遊戲會忽略。
+- **衝突**：不同選項包的同名 acb/awb/dat 後讀的勝出，選 ID 前要掃描全部 `A???`。
+- **收藏品 XML**：
+  - 路徑：`A???\plate\plate<ID 6 位>\Plate.xml`（同理 `partner`、`title`、`icon`、`frame`）。
+  - 欄位：`name.id`、`genre`、`isDefault`、`dispCond`（None / Lock）、`normText`、`eventName`、`relConds`。
+  - 銘牌圖名固定是 `NamePlate/UI_Plate_{id:D6}.png`（`LoadPlate` 覆寫，XML 的 `fileName` 沒用）。
+  - 收藏畫面只列出擁有的、`dispCond == None` 或 `disable` 的項目。
+- **打一首歌自動解鎖**：
+  - `eventName.id = 1`（無期限常時解放）+ `relConds.category = Track` + `kindTrack = DIFFICULTY`、`difficultyId = ANY`。
+  - 每首結束時 `NextTrackProcess` → `CollectionAchieve.CheckNewPlate` / `CheckNewTitle` …，只看 `EventManager.IsOpenEvent` 的事件。
+- **MaiChartManager**：不注入遊戲，只讀寫選項包和 `AquaMai.toml`，可當格式參考；選項包用 `^[A-Z](\d{3})$` 辨認。
 
-### 3.7 其他系統（1.70）
+## 7. 貼圖、影片與換皮
 
-- **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。模擬器 / Maimoller 上會不會亮：未驗證。
-- **自動播放**：`GameManager.IsAutoPlay()`、`AutoJudge()`；`SystemConfig.config.IsAutoPlay` / `IsDebugDisp` / `IsAllOpen`。
-- **選項**：`DB.Option*IDEnum`（`Notespeed`、`Mirror`、`Judgetiming`、`Breakse`、`TapSuccessSe`、`Dispjudge`、`Trackskip`…），用 `GetValue()` 取值。
-- **只確認存在**：拍照（`PhotoEditProcess`、`WebCamManager`）、段位（`Process.CourseSelect/Prepare/Result`）、`GhostResult`、`CircleFinalResult`、`LoginBonus`、`SplitFlapDisplay`、`CustomNote`、`PartyLink`。
+- **貼圖載入**（反編譯）：
+  - `AssetManager.LoadAsset<T>(path)`：路徑轉小寫、去掉副檔名，查 bundle。
+  - `Get{Jacket,JacketThumb,Plate,Frame,Partner}Texture2D(int)` → `(string)`；`GetIconTexture2D(string)`。找不到用 `..._000000`。
+  - 小方法會被 JIT 內聯：`GetPartnerTexture2D(string)` 從 `(int)` 被呼叫時掛不到。
+- **AquaMai `LoadLocalImages`**（預設開，`ImageAssetsDir` = `LocalAssets`）：
+  - 掃描：Prefix `DataManager.LoadMusicBase` 用 `____targetDirs` 拿選項包清單，掃各包 `AssetBundleImages\{jacket,frame,nameplate,framemask,framepattern,icon,chara,partner}`、`map\sprite\bg`、`Common\Sprites\Tab\Title` 的 png/jpg。
+  - 換圖：`TargetMethods` + Prefix 換掉 `AssetManager.Get{Jacket,JacketThumb,Plate,Frame,Icon…}Texture2D(string)`。
+  - 封面優先 `LocalAssets\<ID>.png`；`LocalAssets` 可以在根目錄和選項包裡，依檔名合併。
+  - 分類標題圖 `UI_CMN_TabTitle_<ID>` 是遊戲載入後再換的。掛泛型 `Resources.Load<Sprite>` 會黑屏，掛 `AssetBundleManager.LoadAsset` 會記憶體錯誤。
+- **封面 AB**：官方 400×400 BC7。不用 Unity 也能自己寫 UnityFS（`2018.4.7f1`）RGBA32 Texture2D；container `assets/assetbundle/jacket/ui_jacket_<id>.png`（小封面 `jacket_s/..._s.png`）。長邊限 400，太大會掉幀。
+- **PV**：遊戲讀 `MovieData\<非DX ID>.dat`（USM）。AquaMai `MovieLoader`：遊戲 PV → `MovieData\*.mp4` → 封面；入口 `GameCtrl.Initialize`、`GameMonitor.SetMovieMaterial`、`MovieController.Play/Pause/GetMovieWidth/GetMovieHeight`。
+- **動態銘牌（NgoPlates）**：
+  - Postfix `GetPlateTexture2D(string)`（`HarmonyPriority(0)`），用正規式取 ID，換成自己的 `Texture2D`，之後每幀 `Graphics.CopyTexture` 換畫格。
+  - 畫格是原始 BC7：720×116 一格 83,520 bytes，列由下往上，用 `LoadRawTextureData` 載入。
+  - 背景執行緒讀檔，主執行緒每幀做幾張貼圖。
+  - Postfix `ProcessManager.AddProcess(ProcessBase, byte)` 看型別名稱切換狀態。
+- **直接改資源檔（maimai-ngo）**：
+  - 位置：UI 貼圖、Sprite、`Image` 顏色、Prefab、材質、粒子在 `Sinmai_Data\resources.assets`；導航角色、角色圖在 `A000\AssetBundleImages\*.ab`。
+  - 工具：UnityPy + `TypeTreeGenerator("2018.4.7f1")` + `load_local_dll_folder(Managed)`。讀遊戲資料夾那份；每個物件每次執行只改一次；先 `save()` 再寫 `.new`。
+  - 貼圖保持原名、原尺寸、原格式（BC7 用 etcpak 編碼、texture2ddecoder 解碼）。
+  - 白色遮罩貼圖別畫彩色，改顏色；描邊網格會裁圖；改 Sprite `m_SortingLayer` 會崩潰（改材質 render queue）。
+  - `Null_Selector_ColorBase._colors` 依難度索引，只有 index 7（分類藍）可改。
+  - 字型：Unity 2018 不能從硬碟載 TTF，要寫進遊戲的 Font 物件（AquaMai `Fonts` 則掛 `TextMeshProUGUI.Awake` 加回退字型）。
+  - 發布：安裝器核對原值再寫新值，有備份、可解除安裝，repo 不放遊戲檔。
+- **執行期入口**：
+  - 畫面：`ProcessManager.AddProcess`。
+  - UI：`Image.OnEnable` / `OnPopulateMesh` / `sprite` setter、`TextMeshProUGUI.OnEnable`；全場景換圖 Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable`（AquaMai `ResourcesOverride`，標危險）。
+  - 背景：`BGController.Awake`、`SubBGController.Initialize`。
+  - 其他：`PleaseWaitMonitor.SetTime`（自由模式時鐘）、`TrackStartProcess.OnStart`、`UserDataULProcess.OnStart`（`DataSave/Chara`）、`ResultTimelineManager.SetData`、`SoundManager.PreviewPlay`、`MusicSelectMonitor.ScrollMusicLeft/Right`。
 
-## 4. 音效（CRI ADX2）
+## 8. 音效（CRI ADX2）
 
-### 4.1 格式
+### 8.1 格式
 
 - `.acb`：`@UTF` 表，可能內嵌 memory AWB（`AwbFile`）。`StreamAwbHash` 是配對 `.awb` 的 MD5。
 - `.awb`：AFS2。`0x05` 位移欄寬、`0x06` ID 欄寬、`0x08` 數量、`0x0c` 對齊、`0x0e` subkey。
 
-### 4.2 Cue 解析鏈
+### 8.2 Cue 解析鏈
 
 - `CueTable.ReferenceType`：1 = Waveform、2 = Synth（`ReferenceItems` 是 `(u16 type, u16 idx)`）、3 = Sequence（`TrackIndex` → `TrackTable.EventIndex` → `TrackEventTable.Command`，code 2000 / 2003 的參數是 `(type, idx)`）。
 - `WaveformTable`：`Streaming` 0 = memory、1 / 2 = stream；`MemoryAwbId` / `StreamAwbId`；`EncodeType` 0 = ADX、2 = HCA。
 
-### 4.3 `Mai2Cue`
+### 8.3 `Mai2Cue`
 
 - 遊戲主要音效庫，`AcbID` 0。
 - 488 個 cue，ID 0～543（不連續）。
 - 前綴：`SE_GAME` 212、`SE_RESULT` 46、`SE_MAP` 37、`SE_KALEID` 33、`SE_EMONEY` 20、`SE_ENTRY` 15、`SE_SYS` 12、`BGM_*` 13、`JINGLE_*` 16。
 - 正解音 `SE_GAME_ANSWER` = CueId 88。
-- 歌曲與角色語音不在 `Mai2Cue`。
+- 歌曲與角色語音不在 `Mai2Cue`；歌曲是 `SoundData\music<非DX ID>.acb/.awb`。
 
-### 4.4 加密
+### 8.4 加密
 
 - 金鑰 **`7F4551499DF55E68`**（vgmstream 公開金鑰），ADX 與 HCA 共用，subkey 0。
 - ADX 第 9 型（標頭 `0x12-0x13` = `04 09`）：
@@ -175,7 +240,7 @@
   - 最後把 `0x13` 改成 0，再用 `ffmpeg -f adx` 解碼。
 - HCA：magic `C8 C3 C1 00`（加了遮罩的 `HCA\0`），用 vgmstream `clHCA` 加金鑰解碼。
 
-### 4.5 在 mod 裡換音效（AnswerSoundSwitch 的做法）
+### 8.5 在 mod 裡換音效（AnswerSoundSwitch 的做法）
 
 1. `Singleton<SoundCtrl>.Instance.LoadCueSheet(6, 路徑不含副檔名)`。
 2. 反射私有 `GetCueSheet(6)` → `CriAtomExAcb.GetCueInfo(name, out info)`，確認 ID 對得上。
@@ -184,24 +249,25 @@
 
 改成一張對照表，就能替換任意多個音效，而且不動遊戲原檔。
 
-## 5. 自訂內容（MaiL2d / DxPassCompat 的做法）
+## 9. 自訂內容（MaiL2d / DxPassCompat / maimai-ngo 的做法）
 
 - **自訂 ID**：MaiL2d 用負數（第 i 個 = `-1-i`），DxPassCompat 用 `9000000+i`。取資料方法加 Prefix：自訂 ID 回自己的資料並 `return false`，否則 `return true`。
 - **注入資料表**：
   - Postfix `DataManager.GetPartners`：複製原表，加入 `new PartnerData().Init(Serialize.PartnerData{ name = StringID{id,str}, naviChara, priority })`，結果快取。
   - Prefix `CollectionData.IsHave` getter：自訂 ID 回 true。
   - DxPassCompat：用反射逐一複製 `CardTypeData` 的屬性（呼叫私有 setter）。
+- **不寫 Harmony 的加法**：收藏品直接放選項包 XML + 圖（見第 6 節），走遊戲正常的取得與上傳流程。
 - **不上傳伺服器**：
   - Postfix `VOExtensions.Export(Net.VO.Mai2.UserDetail, ulong)`（伺服器 → 本機）：換成本機選的自訂 ID。
-  - Postfix `Export(Manager.UserDatas.UserDetail)`（本機 → 伺服器）：還原成伺服器原本的 ID。
+  - Postfix `Export(Manager.UserDatas.UserDetail)`（本機 → 伺服器）：還原成伺服器原本的 ID。同理 `Export(UserExtend)` 可擋自訂排序值（AquaMai `SongConstantSort`）。
   - 本機選擇存在 `PlayerPrefs`（`MaiL2DUserModel:{userId}`）。
 - **資源**：
   - AssetBundle：Unity 2018.4.7f1 / StandaloneWindows64。`AssetBundle.LoadFromFile` → `LoadAsset<GameObject>("L2dNaviCharaRoot")`；內嵌的用 `LoadFromStream(GetManifestResourceStream)`。
   - 原生 DLL：第一次啟動時寫到 `Sinmai_Data\Plugins`。
   - 圖片：`Texture2D.LoadImage` → `Sprite.Create`。
-- **伙伴**：
+- **搭檔**：
   - Prefix `AssetManager.GetNaviCharaPrefab(id)` / `GetPartnerTexture2D(id)`。
-  - 語音：`SoundManager.GetPartnerVoiceCueName(voiceID)` 回傳 ACB 路徑。官方伙伴語音 ACB 有 92 個 cue（`VO_000080`～`VO_000254`），HCA；用 ACE 編輯，只刪 Track、不要刪 Cue。
+  - 語音：`SoundManager.GetPartnerVoiceCueName(voiceID)` 回傳 ACB 路徑。官方搭檔語音 ACB 有 92 個 cue（`VO_000080`～`VO_000254`），HCA；用 ACE 編輯，只刪 Track、不要刪 Cue。
   - 結算畫面的 `NavigationCharacter`（由 `ResultMonitor` 管理）。Animator 狀態：`Navi_Fun_Loop_02`（Clear）、`Navi_Fun_Start`（被觸摸）、`Navi_Sad_01`（未 Clear）。
   - MaiL2d 另外提供參數 `IsClear`（Postfix `ResultMonitor.SetStartData`）、`Random`（Prefix `TouchPartnerCharacter`）。
   - maimai-ngo（PartnerLive2D）：
@@ -211,50 +277,62 @@
     - 收藏圖示：掛 `GetPartnerTexture2D(int)`（`(string)` 版本會被內聯）。
     - 新搭檔：`A500\partner\partner<ID>\Partner.xml`（UTF-8 BOM、`isDefault` true）。新的 naviChara ID ≥ 29 沒有 Prefab，遊戲會退回原版角色，要用 `CanvasGroup` 藏起來。
     - 遊戲沒有 Standard shader，只能用 `Sprites/Default`（要設 `_RendererColor`、`_Flip`）、`UI/Default`、Legacy Particles。
-- **不寫 Harmony 的加法**：收藏品直接放選項包 XML + 圖（見第 9 節），走遊戲正常的取得與上傳流程。
 - **DX PASS**：
   - `CodeReadProcess`（`GetUserCard`、`GetEnableUserCard`、`GetReadCard`、`GetCardTypeData`、`IsValidCard`、`IsInPeriod`）、`CodeReadMonitor.Scroll`、`ReadCardChainList.Deploy`（私有 `_readCardChainList`）。
   - `CardData.IsDisable` / `enableVersion`（舊卡不顯示 → 把 `StringID.id` 改成 12）、`UserData.CardList`。
   - 卡種：2 Bronze、3 Silver、4 Gold、5 Platinum、6 Freedom。
 
-## 6. 踩坑（症狀 → 解法）
+## 10. 效能與測試
 
-- **撞名**：
-  - 遊戲有全域命名空間 `Process`、`Monitor`。用 `using Proc = System.Diagnostics.Process`、`global::Process.X`、`System.Threading.Monitor`。
-  - `HarmonyLib.Harmony`、`System.Type` 寫完整。
-- **非主執行緒碰 Unity** → 偶發閃退。外部執行緒只排隊。
-- **太早碰遊戲物件** → 登入閃退。用就緒門控。
-- **曲目變少** → 被其他 mod 過濾或讀到佔位表。多路讀取取最多；整庫被判停用時關掉停用過濾。
-- **Finalizer 吞例外** → 遊戲帶著錯誤狀態繼續跑。預設關閉。
-- **主執行緒直接寫網路** → 卡死。每個連線一條背景寫入執行緒，加逾時；不要用 ThreadPool（HttpListener 也靠它）。
-- **卡頓**：
-  - 原因：整表重掃、JSON 重建、封面編碼擠在同一幀。
-  - 解法：便宜的變化偵測、片段快取、跳轉時暫停重活。
-- **DX 譜點錯**：依使用者點的那套決定 `ScoreType`。
-- **在難度畫面再跳一次後返回失效**：先 `SyncNext(Music)` 退回。
-- **`CalcMonitorDifficulty` 覆寫難度**：先呼叫它再設難度。
-- **`isExistsScore` 型別**：可能是 `bool[]`、`List<bool>` 或 `IList`，都要支援。
-- **Mono `HttpListener`**：
-  - 會比對 Host 標頭，外部網域要改寫 Host。
-  - 不支援 IPv6，要用 `TcpListener` 接再轉給它。
-- **`ServicePointManager`** 是整個程序共用的，網路下載交給外部程式。
-- **跨版本**：關鍵成員用反射加防呆，找不到就停用該功能；或用 SHA-256 標明支援的 DLL 版本。
-- **ADX 解出雜訊**：漏了 `& 0x1fff`。
-- **人氣排行榜（みんなの人気楽曲 / POPULAR）分類看不到（SDEZ 1.70 IL 與實測已確認，2P 加 GUEST 就出現；外面機台行為不同，原因未查明）**：`MusicSelectProcess.registerMusic` 只在有已登入玩家 `Detail.HighestRating < 4000` 時才建立（遊戲設計，數字寫在程式裡、等於黃色 Rating 門檻，沒有設定可改，只能 Harmony）。排行資料來自 `MusicRankingManager`（伺服器下發，否則用 `DataManager.GetMusicOffRankings()`）。
-- **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`、`NavigationAnime.Welcom`。照遊戲的拼法寫，不確定時兩種都試。
-- **補丁不觸發**：小方法被 Mono JIT 內聯（`GetPartnerTexture2D(string)`、`InputManager.GetTouchPanelAreaDown`）。改掛呼叫端用的多載，或下一層較大的方法（`IO.TouchPanel.GameInputLog.TriggerOn`）。
-- **記憶體洩漏**：
-  - Boehm GC 沒有 ephemeron，`ConditionalWeakTable` 會強引用 key（每首 +50 MB）。改用 instance ID 字典，離開畫面時清掉。
-  - 每幀補丁讀 `Object.name`、組字串，會週期性卡頓。依 instance ID 快取。
-- **歌曲開始凍住**：淡出後 `GameProcess.OnStart` 又 `unloadUnusedAndGC` 一次。Prefix 略過 20 秒內的第二次。
-- **mod 裡模擬按鈕無效**：按鈕 / 刷卡在 amdaemon（segatools）讀。觸控可從 `GameInputLog.TriggerOn` 注入。
-- **隱藏店內匹配**：不能略過 `MusicSelectProcess.PartyExec`（NORMAL 模式 START 靠它）。改成 `SetConnectData` 後拿掉分類，`IsConnectStart` / `IsConnectStop` 回「沒變化」。
-- **改資源**：
-  - 改 Sprite `m_SortingLayer` 會崩潰，改材質 render queue。
-  - 白色遮罩貼圖別畫彩色，改顏色。
-  - 描邊網格會裁圖，改成整張四邊形或放大 `textureRect`。
+- **GC 時機**（反編譯）：
+  - `SystemConfig.unloadUnusedAndGC` = `UnloadUnusedAssets` + `GC.Collect`，每次淡出都會跑。
+  - `GameProcess.OnStart` 再跑一次，然後 `GCMode = Disabled`；`OnRelease` 打開 GC 並 `Collect`。
+  - **打歌中沒有 GC**，卡頓集中在歌曲開始、淡入淡出、進結算。
+- **Mono Boehm GC**（NGO 實測）：不分代，heap 越大每次回收越慢。量法：每首歌記幀時間與 `GC.CollectionCount(0)`，每次清理記 `GC.GetTotalMemory`；20 首以上持平才算健康。
+- **按鍵**（NGO 實測）：
+  - 按鈕 / Test / Service / 刷卡由 amdaemon 的 `mai2hook.dll`、`hinata.dll` 以 `GetAsyncKeyState` 讀，且只在遊戲視窗在前景時才收。
+  - segatools 鍵位：Enter 按住 3 秒刷卡、`WEDCXZAQ` = 按鈕 1～8（C = 4 = 確認）、F1 Test、F2 Service、F3 投幣。
+- **測試注意**（NGO 實測）：
+  - 待機畫面只能刷卡，按其他按鈕會開始 GUEST。
+  - 功能票畫面按 C 會用掉票。
+  - 強制結束會跳過上傳，成績會不見，要用 AquaMai `OneKeyEntryEnd`。
+  - 假造帳號狀態上傳前要還原所有可能被改的欄位（含 `CharaSlot`）。
 
-## 7. SongRequest（chidi0716/maimai-song-request-，v1.1.11）
+## 11. AquaMai 功能與入口（原始碼，詳見 docs/11）
+
+- **規模**：139 個設定段，每段是一個功能 + 它掛的遊戲方法。想做的功能先查 AquaMai 有沒有（判定誤差統計、練習模式、定數排序都已有）。
+- **跟本知識庫相關**：
+  - `OptionLoadFix`（預設開）：Prefix `AppImage.OptionMountRootPath` → `StreamingAssets`，Postfix `DataManager.GetDirs` 去重。
+  - `HideSelfMadeCharts`：Postfix `DataManager.GetMusics`，用 `StackTrace` 只在 `MusicSelectProcess` 呼叫時過濾。官方包 = 資料夾有 `DataConfig.xml` 或 `OfficialChartsMark.txt`。
+  - `MaimollerIO`：Prefix `Bd15070_4IF._setColor/_setColorMulti/_setColorFet…` 轉成 Maimoller HID（`Led1p/2p` 預設 true），所以 `MechaManager.LedIf[p].SetColor` 在 Maimoller 上應該會亮（未實測）。
+  - `LoadLocalImages`、`MovieLoader`：見第 7 節。
+- **技巧**：
+  - 擴充 enum 表：Prefix `DB.SortTabIDEnum` 的 `GetEnd/IsValid/GetName/GetDetail/GetFilePath/GetEnumName/GetEnumValue`，再改 `MusicSelectProcess.AddSort/CategoryTabSort`；上傳前 Postfix `VOExtensions.Export(UserExtend)` 把自訂值換回去（`SongConstantSort`）。
+  - 判定誤差：Postfix `NoteBase.Judge` / `HoldNote.JudgeHoldHead` 讀 `___JudgeTimingDiffMsec`，扣掉 `UserOption.GetJudgeTimingFrame() × 16.6667`（`UnstableRate`）。
+  - 暫停 / 跳轉：1.70 沒有 `GameProcess.debugFeature`，靠 polyfill 改 `NotesManager.UpdateTimer`、`MovieController.Pause/SetSeekFrame`；目前時間 = `NotesManager.GetCurrentMsec() - 91`（`PracticeMode`）。
+  - 全場景換圖：Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable` 依名稱替換（`ResourcesOverride`，標危險）。
+  - 判斷呼叫者：Postfix 裡 `new StackTrace().GetFrames()`（`HideSelfMadeCharts`）。
+- **注意**：AquaMai 的 Prefix 回 `false` 時原方法不會跑（其他 Prefix 是否照跑依 HarmonyX 行為，未驗證）；自己的補丁盡量用 Postfix。
+
+## 12. 參考專題
+
+| 專題 | 作者 / 授權 | 重點 |
+|---|---|---|
+| maimai-song-request- | ZCM-X / MIT | 點歌原作；就緒門控、崩潰保護、DX 修正、效能 |
+| 扫码点歌 SongSearch v1.1.1 | Clansty / 未標授權（只參考做法） | 參數注入、`levelDecimal`；反例：網頁執行緒直接操作遊戲 |
+| AnswerSoundSwitch v1.1.0 | Hematemesis-V | `SoundCtrl.Play` 轉向第 6 號音效庫 |
+| DxPassCompat v2.4.0（說明檔標 v2.5） | ZCM-X | DX PASS 卡面、`9000000+` ID、`Traverse` |
+| MaiL2d v1.3.0 | Clansty / GPLv3 | Live2D 搭檔、負數 ID、`VOExtensions.Export`、AssetBundle、原生 DLL |
+| maimai-dghub-link v1.4.10 | XiaoLan9999 / GPLv3（只參考做法） | 判定入口、Process 一覽、倒數、版本、跨版本反射；沒有新的接入技術 |
+| murasame | 第三方 | MaiL2d 模型包 + 語音包（92 cue，47 個有聲音，HCA） |
+| NGO 銘牌包（NgoPlates v1.0.0） | TOTO / 無授權檔，發布者公開歡迎 fork | 選項包 `A588` 加銘牌、Track 條件自動解鎖、BC7 動態銘牌（`GetPlateTexture2D` + `CopyTexture`） |
+| maimai-ngo（換皮 + PartnerLive2D） | TOTO-git-q / 無授權檔，發布者公開歡迎 fork | UnityPy 改 `resources.assets`、十多個畫面入口、自訂搭檔、GC / 洩漏、amdaemon 按鍵 |
+| MaiChartManager | MuNET-OSS / GPLv3（只參考做法） | 自製譜管理：一首歌的檔案組成、ID 規則、封面 AB 格式、ID 衝突、影片 / 音訊轉換、AquaMai 安裝與設定 |
+| AquaMai v1.9.26 | MewoLab / Apache-2.0 | 原始碼公開；139 個功能的入口目錄（第 11 節） |
+| MuMod | MewoLab / Apache-2.0 | AquaMai 更新器；動態載入 mod（第 2 節） |
+| MuNET、ComboWeb | — | 只被提到；MuNET 會改寫曲目讀取 |
+
+## 13. SongRequest（chidi0716/maimai-song-request-，v1.1.11）
 
 - **功能**：`http://127.0.0.1:8790/` 網頁點歌 → 遊戲跳到該曲難度畫面。另有正在遊玩面板（SSE）、遠端分享。
 - **接入**：
@@ -276,113 +354,46 @@
 - **設定**：`SongRequestMod.toml`。
 - **原始碼**：`Mod`、`SelectDriver`、`SongTable`、`Web`、`MainThread`、`Jackets`、`LiveState`、`Tunnel`、`Direct`、`Aliases`、`CrashGuard`。
 
-## 8. 參考專題
+## 14. 踩坑（症狀 → 解法）
 
-| 專題 | 作者 / 授權 | 重點 |
-|---|---|---|
-| maimai-song-request- | ZCM-X / MIT | 點歌原作；就緒門控、崩潰保護、DX 修正、效能 |
-| 扫码点歌 SongSearch v1.1.1 | Clansty / 未標授權（只參考做法） | 參數注入、`levelDecimal`；反例：網頁執行緒直接操作遊戲 |
-| AnswerSoundSwitch v1.1.0 | Hematemesis-V | `SoundCtrl.Play` 轉向第 6 號音效庫 |
-| DxPassCompat v2.4.0（說明檔標 v2.5） | ZCM-X | DX PASS 卡面、`9000000+` ID、`Traverse` |
-| MaiL2d v1.3.0 | Clansty / GPLv3 | Live2D 伙伴、負數 ID、`VOExtensions.Export`、AssetBundle、原生 DLL |
-| maimai-dghub-link v1.4.10 | XiaoLan9999 / GPLv3（只參考做法） | 判定入口、Process 一覽、倒數、版本、跨版本反射；沒有新的接入技術 |
-| murasame | 第三方 | MaiL2d 模型包 + 語音包（92 cue，47 個有聲音，HCA） |
-| NGO 銘牌包（NgoPlates v1.0.0） | TOTO / 無授權檔，發布者公開歡迎 fork | 選項包 `A588` 加銘牌、Track 條件自動解鎖、BC7 動態銘牌（`GetPlateTexture2D` + `CopyTexture`） |
-| maimai-ngo（換皮 + PartnerLive2D） | TOTO-git-q / 無授權檔，發布者公開歡迎 fork | UnityPy 改 `resources.assets`、十多個畫面入口、自訂搭檔、GC / 洩漏、amdaemon 按鍵 |
-| MaiChartManager | MuNET-OSS / GPLv3（只參考做法） | 自製譜管理：一首歌的檔案組成、ID 規則、封面 AB 格式、ID 衝突、影片 / 音訊轉換、AquaMai 安裝與設定 |
-| AquaMai | MewoLab / Apache-2.0 | 原始碼公開；`LoadLocalImages`（直讀 PNG）、`MovieLoader`（MP4 PV）已讀；其他功能未逐一研究 |
-| MuNET、ComboWeb | — | 只被提到；MuNET 會改寫曲目讀取 |
-
-## 9. 資源與選項包
-
-- **選項包**（反編譯 `DataManager.GetDirs`）：
-  - 掃描範圍：`StreamingAssets\A???`（A + 3 位數字）排序後依序讀，再接 `AppImage.OptionMountRootPath\N???`（AquaMai `OptionLoadFix` 把這個路徑改成 `StreamingAssets`）。
-  - 覆蓋規則：XML 以 ID 為鍵、影片 / 音效以檔名為鍵、`AssetBundleImages\**\*.ab` 以相對路徑為鍵，都是**後讀的勝出**；`disable = true` 的條目會被移除。
-  - `DataConfig.xml` 取 version 最大的。
-  - 所以加內容 = 開一個新的 `Axxx`，不動原檔。
-- **收藏品 XML**：
-  - 路徑：`A???\plate\plate<ID 6 位>\Plate.xml`（同理 `partner`、`title`、`icon`、`frame`）。
-  - 欄位：`name.id`、`genre`、`isDefault`、`dispCond`（None / Lock）、`normText`、`eventName`、`relConds`。
-  - 銘牌圖名固定是 `NamePlate/UI_Plate_{id:D6}.png`（`LoadPlate` 覆寫，XML 的 `fileName` 沒用）。
-  - 收藏畫面只列出擁有的、`dispCond == None` 或 `disable` 的項目。
-- **打一首歌自動解鎖**：
-  - `eventName.id = 1`（無期限常時解放）+ `relConds.category = Track` + `kindTrack = DIFFICULTY`、`difficultyId = ANY`。
-  - 每首結束時 `NextTrackProcess` → `CollectionAchieve.CheckNewPlate` / `CheckNewTitle` …，只看 `EventManager.IsOpenEvent` 的事件。
-- **貼圖載入**：
-  - `AssetManager.LoadAsset<T>(path)`：路徑轉小寫、去掉副檔名，查 bundle。
-  - `GetPlateTexture2D(int)` → `(string)`，找不到用 `UI_Plate_000000`。Frame、Partner、Icon 同理。
-  - 直讀 PNG 要靠 AquaMai `[GameSystem.Assets.LoadLocalImages]`（原始碼已確認，見第 11 節）。
-- **動態銘牌（NgoPlates）**：
-  - Postfix `GetPlateTexture2D(string)`（`HarmonyPriority(0)`），用正規式取 ID，換成自己的 `Texture2D`，之後每幀 `Graphics.CopyTexture` 換畫格。
-  - 畫格是原始 BC7：720×116 一格 83,520 bytes，列由下往上，用 `LoadRawTextureData` 載入。
-  - 背景執行緒讀檔，主執行緒每幀做幾張貼圖。
-  - Postfix `ProcessManager.AddProcess(ProcessBase, byte)` 看型別名稱切換狀態。
-- **直接改資源檔（maimai-ngo）**：
-  - 位置：UI 貼圖、Sprite、`Image` 顏色、Prefab、材質、粒子在 `Sinmai_Data\resources.assets`；導航角色、角色圖在 `A000\AssetBundleImages\*.ab`。
-  - 工具：UnityPy + `TypeTreeGenerator("2018.4.7f1")` + `load_local_dll_folder(Managed)`。讀遊戲資料夾那份；每個物件每次執行只改一次；先 `save()` 再寫 `.new`。
-  - 貼圖保持原名、原尺寸、原格式（BC7 用 etcpak 編碼、texture2ddecoder 解碼）。
-  - 發布：安裝器核對原值再寫新值，有備份、可解除安裝，repo 不放遊戲檔。
-- **執行期入口**：
-  - 畫面：`ProcessManager.AddProcess`。
-  - UI：`Image.OnEnable` / `OnPopulateMesh` / `sprite` setter、`TextMeshProUGUI.OnEnable`。
-  - 背景：`BGController.Awake`、`SubBGController.Initialize`。
-  - 其他：`PleaseWaitMonitor.SetTime`（自由模式時鐘）、`TrackStartProcess.OnStart`、`UserDataULProcess.OnStart`（`DataSave/Chara`）、`ResultTimelineManager.SetData`、`SoundManager.PreviewPlay`、`MusicSelectMonitor.ScrollMusicLeft/Right`。
-- **字型**：Unity 2018 不能從硬碟載 TTF，要寫進遊戲的 Font 物件。
-- **資源物件**：`Null_Selector_ColorBase._colors` 依難度索引，只有 index 7（分類藍）可改。
-
-## 10. 效能與測試
-
-- **GC 時機**（反編譯）：
-  - `SystemConfig.unloadUnusedAndGC` = `UnloadUnusedAssets` + `GC.Collect`，每次淡出都會跑。
-  - `GameProcess.OnStart` 再跑一次，然後 `GCMode = Disabled`；`OnRelease` 打開 GC 並 `Collect`。
-  - **打歌中沒有 GC**，卡頓集中在歌曲開始、淡入淡出、進結算。
-- **Mono Boehm GC**（NGO 實測）：不分代，heap 越大每次回收越慢。量法：每首歌記幀時間與 `GC.CollectionCount(0)`，每次清理記 `GC.GetTotalMemory`；20 首以上持平才算健康。
-- **按鍵**（NGO 實測）：
-  - 按鈕 / Test / Service / 刷卡由 amdaemon 的 `mai2hook.dll`、`hinata.dll` 以 `GetAsyncKeyState` 讀，且只在遊戲視窗在前景時才收。
-  - segatools 鍵位：Enter 按住 3 秒刷卡、`WEDCXZAQ` = 按鈕 1～8（C = 4 = 確認）、F1 Test、F2 Service、F3 投幣。
-- **測試注意**（NGO 實測）：
-  - 待機畫面只能刷卡，按其他按鈕會開始 GUEST。
-  - 功能票畫面按 C 會用掉票。
-  - 強制結束會跳過上傳，成績會不見，要用 AquaMai `OneKeyEntryEnd`。
-  - 假造帳號狀態上傳前要還原所有可能被改的欄位（含 `CharaSlot`）。
-
-## 11. 自製譜與選項包（MaiChartManager / AquaMai 原始碼）
-
-- **一首歌的檔案**（以 DX ID 11234、非 DX ID 1234 為例）：
-  - `A???\music\music011234\Music.xml` + `011234_00～05.ma2`
-  - `SoundData\music001234.acb/.awb`、`MovieData\001234.dat`（USM）
-  - `AssetBundleImages\jacket\ui_jacket_001234.ab`、`jacket_s\ui_jacket_001234_s.ab`
-  - 音訊、影片、封面都用**非 DX ID**（`ID % 10000`），STD / DX 共用。
-- **ID**：STD < 10000，DX = STD + 10000，宴會場 ≥ 100000。`movieName`、`cueName`、`artistName` 的 id 用非 DX ID。
-- **Music.xml 欄位**：
-  - 曲目：`name`、`sortName`、`artistName`、`genreName`、`AddVersion`、`version`、`bpm`、`longMusic`（1 = 吃 2 首）、`disable`
-  - 解鎖：`eventName` / `eventName2` / `subEventName`、`lockType` / `subLockType`
-  - 宴會場：`utageKanjiName`、`comment`、`utagePlayStyle`
-  - 譜面 `notesData/Notes` ×6：`file/path`、`level`、`levelDecimal`、`musicLevelID`、`maxNotes`、`isEnable`、`notesDesigner`
-  - 自製慣例：`eventName` 1、作者 / 譜師 id 999；未知節點（例 `X-MCM/`）遊戲會忽略。
-- **封面 AB**：官方 400×400 BC7。不用 Unity 也能自己寫 UnityFS（`2018.4.7f1`）RGBA32 Texture2D；container `assets/assetbundle/jacket/ui_jacket_<id>.png`（小封面 `jacket_s/..._s.png`）。長邊限 400，太大會掉幀。
-- **AquaMai `LoadLocalImages`**（預設開，`ImageAssetsDir` = `LocalAssets`）：
-  - 掃描：Prefix `DataManager.LoadMusicBase` 用 `____targetDirs` 拿選項包清單，掃各包 `AssetBundleImages\{jacket,frame,nameplate,framemask,framepattern,icon,chara,partner}`、`map\sprite\bg`、`Common\Sprites\Tab\Title` 的 png/jpg。
-  - 換圖：`TargetMethods` + Prefix 換掉 `AssetManager.Get{Jacket,JacketThumb,Plate,Frame,Icon…}Texture2D(string)`。
-  - 封面優先 `LocalAssets\<ID>.png`；`LocalAssets` 可以在根目錄和選項包裡，依檔名合併。
-  - 分類標題圖 `UI_CMN_TabTitle_<ID>` 是遊戲載入後再換的。掛泛型 `Resources.Load<Sprite>` 會黑屏，掛 `AssetBundleManager.LoadAsset` 會記憶體錯誤。
-- **AquaMai `MovieLoader`**：
-  - 播放順序：遊戲 PV（`.dat`）→ `MovieData\*.mp4` → 封面。
-  - 入口：`GameCtrl.Initialize`、`GameMonitor.SetMovieMaterial`、`MovieController.Play/GetMovieWidth/GetMovieHeight`。
-- **衝突**：不同選項包的同名 acb/awb/dat 後讀的勝出，選 ID 前要掃描全部 `A???`。
-- **A000 資料夾**（可被選項包覆蓋的資料種類）：music*、plate、title、icon、frame、partner、chara、charaAwake、map*、event、mission、course、challenge、class、udemae*、circle*、festa*、kaleidxScope*、pass*、shopItem*、ticket、loginBonus、hiddenItem、scoreRanking 等。完整清單見 docs/13。
-
-## 12. AquaMai 功能與入口（原始碼，詳見 docs/14）
-
-- **規模**：139 個設定段，每段是一個功能 + 它掛的遊戲方法。想做的功能先查 AquaMai 有沒有。
-- **跟本知識庫相關**：
-  - `OptionLoadFix`（預設開）：Prefix `AppImage.OptionMountRootPath` → `StreamingAssets`，Postfix `DataManager.GetDirs` 去重。
-  - `HideSelfMadeCharts`：Postfix `DataManager.GetMusics`，用 `StackTrace` 只在 `MusicSelectProcess` 呼叫時過濾。官方包 = 資料夾有 `DataConfig.xml` 或 `OfficialChartsMark.txt`。
-  - `MaimollerIO`：Prefix `Bd15070_4IF._setColor/_setColorMulti/_setColorFet…` 轉成 Maimoller HID（`Led1p/2p` 預設 true），所以 `MechaManager.LedIf[p].SetColor` 在 Maimoller 上應該會亮（未實測）。
-- **技巧**：
-  - 擴充 enum 表：Prefix `DB.SortTabIDEnum` 的 `GetEnd/IsValid/GetName/GetDetail/GetFilePath/GetEnumName/GetEnumValue`，再改 `MusicSelectProcess.AddSort/CategoryTabSort`；上傳前 Postfix `VOExtensions.Export(UserExtend)` 把自訂值換回去（`SongConstantSort`）。
-  - 判定誤差：Postfix `NoteBase.Judge` / `HoldNote.JudgeHoldHead` 讀 `___JudgeTimingDiffMsec`，扣掉 `UserOption.GetJudgeTimingFrame() × 16.6667`（`UnstableRate`）。
-  - 暫停 / 跳轉：1.70 沒有 `GameProcess.debugFeature`，靠 polyfill 改 `NotesManager.UpdateTimer`、`MovieController.Pause/SetSeekFrame`；目前時間 = `NotesManager.GetCurrentMsec() - 91`（`PracticeMode`）。
-  - 全場景換圖：Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable` 依名稱替換（`ResourcesOverride`，標危險）。
-  - 跨版本欄位：`_beforeCategorySortSetting`（版本號 ≥ 26500）/ `_categorySortSetting`。
-- **注意**：AquaMai 的 Prefix 回 `false` 時原方法不會跑（其他 Prefix 是否照跑依 HarmonyX 行為，未驗證）；自己的補丁盡量用 Postfix。
+- **撞名**：
+  - 遊戲有全域命名空間 `Process`、`Monitor`。用 `using Proc = System.Diagnostics.Process`、`global::Process.X`、`System.Threading.Monitor`。
+  - `HarmonyLib.Harmony`、`System.Type` 寫完整。
+- **非主執行緒碰 Unity** → 偶發閃退。外部執行緒只排隊。
+- **太早碰遊戲物件** → 登入閃退。用就緒門控。
+- **曲目變少** → 被其他 mod 過濾（AquaMai `HideSelfMadeCharts`、MuNET）或讀到佔位表。多路讀取取最多；整庫被判停用時關掉停用過濾。
+- **Finalizer 吞例外** → 遊戲帶著錯誤狀態繼續跑。預設關閉。
+- **主執行緒直接寫網路** → 卡死。每個連線一條背景寫入執行緒，加逾時；不要用 ThreadPool（HttpListener 也靠它）。
+- **卡頓**：
+  - 原因：整表重掃、JSON 重建、封面編碼擠在同一幀。
+  - 解法：便宜的變化偵測、片段快取、跳轉時暫停重活。
+- **DX 譜點錯**：依使用者點的那套決定 `ScoreType`。
+- **在難度畫面再跳一次後返回失效**：先 `SyncNext(Music)` 退回。
+- **`CalcMonitorDifficulty` 覆寫難度**：先呼叫它再設難度。
+- **`isExistsScore` 型別**：可能是 `bool[]`、`List<bool>` 或 `IList`，都要支援。
+- **Mono `HttpListener`**：
+  - 會比對 Host 標頭，外部網域要改寫 Host。
+  - 不支援 IPv6，要用 `TcpListener` 接再轉給它。
+- **`ServicePointManager`** 是整個程序共用的，網路下載交給外部程式。
+- **跨版本**：關鍵成員用反射加防呆，找不到就停用該功能；或用 SHA-256 標明支援的 DLL 版本。
+- **ADX 解出雜訊**：漏了 `& 0x1fff`。
+- **人氣排行榜分類看不到**：見第 4.2 節。
+- **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`、`NavigationAnime.Welcom`、`AssetBundleManager.OnSucess`。照遊戲的拼法寫，不確定時兩種都試。
+- **補丁不觸發**：
+  - 小方法被 Mono JIT 內聯（`GetPartnerTexture2D(string)`、`InputManager.GetTouchPanelAreaDown`）。改掛呼叫端用的多載，或下一層較大的方法（`IO.TouchPanel.GameInputLog.TriggerOn`）。
+  - AquaMai 已在同一方法掛 Prefix 回 `false`。改用 Postfix。
+- **記憶體洩漏**：
+  - Boehm GC 沒有 ephemeron，`ConditionalWeakTable` 會強引用 key（每首 +50 MB）。改用 instance ID 字典，離開畫面時清掉。
+  - 每幀補丁讀 `Object.name`、組字串，會週期性卡頓。依 instance ID 快取。
+- **歌曲開始凍住**：淡出後 `GameProcess.OnStart` 又 `unloadUnusedAndGC` 一次。Prefix 略過 20 秒內的第二次。
+- **mod 裡模擬按鈕無效**：按鈕 / 刷卡在 amdaemon（segatools）讀。觸控可從 `GameInputLog.TriggerOn` 注入。
+- **隱藏店內匹配**：不能略過 `MusicSelectProcess.PartyExec`（NORMAL 模式 START 靠它）。改成 `SetConnectData` 後拿掉分類，`IsConnectStart` / `IsConnectStop` 回「沒變化」。
+- **改資源**：
+  - 改 Sprite `m_SortingLayer` 會崩潰，改材質 render queue。
+  - 白色遮罩貼圖別畫彩色，改顏色。
+  - 描邊網格會裁圖，改成整張四邊形或放大 `textureRect`。
+  - UnityPy：先 `save()` 再寫 `.new`；同一物件只改一次。
+- **分類標題圖**：不能掛 `Resources.Load<Sprite>`（黑屏）或 `AssetBundleManager.LoadAsset`（記憶體錯誤）。
+- **自製封面掉幀**：長邊限 400。
+- **音訊 / PV 被別的歌蓋掉**：非 DX ID 同名檔後讀的勝出，選 ID 前掃全部選項包。
+- **MelonLoader**：DLL 放進 `Mods` 子資料夾不會載入；MelonPlugin 放 `Package\Plugins`、MelonMod 放 `Package\Mods`。

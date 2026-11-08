@@ -1,4 +1,4 @@
-# 07 SongRequest（點歌台 mod）架構
+# 13 SongRequest（點歌台 mod）架構
 
 原始碼：<https://github.com/chidi0716/maimai-song-request->（fork 自 ZCM-X 原作，MIT）。以下以 v1.1.11 為準。
 

@@ -1,4 +1,4 @@
-# 14 AquaMai 功能與遊戲入口
+# 11 AquaMai 功能與遊戲入口
 
 > 來源：[MewoLab/AquaMai](https://github.com/MewoLab/AquaMai)（Apache-2.0，commit `77f6eb1`，2026-10-31）。只讀了原始碼，沒有執行。
 >
@@ -12,25 +12,25 @@
   - Prefix `AppImage.OptionMountRootPath` getter，回傳 `Application.streamingAssetsPath`（或自訂路徑）。
   - Postfix `DataManager.GetDirs` 去掉重複的資料夾。
   - 本機 `StreamingAssets\N100`、`N999` 會被讀到，靠的就是它。原版的掛載路徑是 AMDaemon 提供的，沒有在 `Assembly-CSharp` 裡確認。
-- **`GetMusics()` 結果變少**（[05](05-踩坑紀錄.md) 第 6 條）的一個來源是 `UX/HideSelfMadeCharts`：
+- **`GetMusics()` 結果變少**（[14](14-踩坑紀錄.md) 第 6 條）的一個來源是 `UX/HideSelfMadeCharts`：
   - Postfix `DataManager.GetMusics`，用 `StackTrace` 確認呼叫者是 `MusicSelectProcess` 才過濾。
   - 「官方」選項包的判斷：資料夾裡有 `DataConfig.xml` 或 `OfficialChartsMark.txt`；其他包裡的歌都算自製譜。
 - **按鈕 LED 在 Maimoller 上會不會亮**：`GameSystem/MaimollerIO`
   - Prefix `Bd15070_4IF._setColor`、`_setColorMulti`、`_setColorFet`、`_setLedAllOff` 等，把遊戲的 LED 指令轉成 Maimoller 的 HID 指令（`Led1p` / `Led2p` 預設 true）。
   - 所以 mod 呼叫 `MechaManager.LedIf[p].SetColor(...)` 在 Maimoller 上應該會亮（原始碼推斷，沒實測）。本機 `AquaMai.toml` 已開 `[GameSystem.MaimollerIO]`。
   - 亮度：`Tweaks/LedBrightnessControl` 也掛同一組 `_setColor*`。
-- **直讀圖片 / PV**：見 [13](13-自製譜與選項包管理.md)。
+- **直讀圖片 / PV**：見 [06](06-選項包與資料檔.md)。
 
 ## 2. 寫 mod 可以借用的技巧
 
 | 技巧 | 來源功能 | 做法 |
 |---|---|---|
 | **擴充遊戲內建的列舉表** | `GameSystem/SongConstantSort`（定數排序） | 遊戲的選項 / 分頁是 `DB.XxxID` enum + `XxxIDEnum` 靜態表。Prefix `SortTabIDEnum` 的 `GetEnd`、`IsValid`、`GetName`、`GetDetail`、`GetFilePath`、`GetEnumName`、`GetEnumValue`，讓新值（`End` 之後）合法；再改 `MusicSelectProcess.AddSort` / `CategoryTabSort` 和 `MusicSelectMonitor` 的分頁圖 / 顏色 / 字串 |
-| **不讓自訂值上傳** | 同上 | Postfix `VOExtensions.Export(UserExtend)`，上傳前把 `sortCategorySetting` 的自訂值換回 `Genre`。和 [08](08-加入自訂內容.md) MaiL2d 的做法相同 |
+| **不讓自訂值上傳** | 同上 | Postfix `VOExtensions.Export(UserExtend)`，上傳前把 `sortCategorySetting` 的自訂值換回 `Genre`。和 [09](09-加入自訂內容.md) MaiL2d 的做法相同 |
 | **跨版本欄位名** | 同上 | `GameInfo.GameVersion >= 26500` 時用 `_beforeCategorySortSetting`，否則用 `_categorySortSetting`（遊戲版本號 ≥ 26500 時欄位改名；1.70 反編譯確認有 `_beforeCategorySortSetting`） |
 | **取得精確判定誤差** | `Utils/UnstableRate`、`UX/JudgeAccuracyInfo` | Postfix `NoteBase.Judge`、`HoldNote.JudgeHoldHead`，讀私有欄位 `___JudgeTimingDiffMsec`；扣掉玩家的判定調整 `UserOption.GetJudgeTimingFrame() × 16.6667ms`。Slide 用 `SlideRoot.Judge` |
 | **暫停 / 跳轉 / 變速** | `UX/PracticeMode`、`Fix/DebugFeature` | 1.70 的 `GameProcess` 沒有 `debugFeature` 欄位，AquaMai 用自己的 polyfill：改計時器（`NotesManager.UpdateTimer`）、影片 `MovieController.Pause` / `SetSeekFrame`、音訊播放器變速；目前時間 = `NotesManager.GetCurrentMsec() - 91`；跳轉後 `GameCtrl.ForceNoteCollect` 收掉已過的音符 |
-| **全場景換圖** | `Fancy/ResourcesOverride`（標「危險功能」） | Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable`，依 `sprite.name` / `texture.name` 查自己的圖替換。缺點是每次重建都會跑，見 [11](11-效能與測試.md) 的 `Object.name` 配置問題 |
+| **全場景換圖** | `Fancy/ResourcesOverride`（標「危險功能」） | Postfix `Graphic.Rebuild`、`CanvasScaler.OnEnable`，依 `sprite.name` / `texture.name` 查自己的圖替換。缺點是每次重建都會跑，見 [10](10-效能與測試.md) 的 `Object.name` 配置問題 |
 | **條件式掛補丁** | 多數功能 | `[EnableIf(nameof(條件))]`、`OnBeforePatch(Harmony)` 依版本或設定決定掛哪一組（AquaMai 自己的框架） |
 | **判斷呼叫者** | `UX/HideSelfMadeCharts` | Postfix 裡用 `new StackTrace().GetFrames()` 看是不是某個類別呼叫的，只在特定畫面改結果 |
 

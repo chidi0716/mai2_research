@@ -1,4 +1,4 @@
-# 01 環境與 MelonLoader
+# 02 環境與 MelonLoader
 
 ## 遊戲
 
@@ -8,7 +8,7 @@
 | Unity 版本 | **2018.4.7f1**（MaiL2d 的模型範本專案版本；自製 AssetBundle 要用同版編輯器，目標 StandaloneWindows64） |
 | 遊戲邏輯 | `Package\Sinmai_Data\Managed\Assembly-CSharp.dll` |
 | Unity 模組 | 同資料夾的 `UnityEngine.dll`、`UnityEngine.CoreModule.dll`、`UnityEngine.UI.dll`… |
-| 音效資源 | CRI ADX2（`.acb` / `.awb`），見 [04 音效系統](04-音效系統.md) |
+| 音效資源 | CRI ADX2（`.acb` / `.awb`），見 [04 音效系統](08-音效系統.md) |
 
 因為是 Mono，`Assembly-CSharp.dll` 是一般的 .NET 組件，可以直接用 ILSpy / `ilspycmd` 反編譯成可讀的 C#：
 
@@ -80,7 +80,7 @@ ilspycmd -p -o out/ \
 | `OnEarlyInitializeMelon` | 註冊後最早的時機 |
 | `OnInitializeMelon` | 讀設定、掛 Harmony |
 | `OnLateInitializeMelon` | 所有 mod 都初始化完之後 |
-| `OnSceneWasLoaded` / `OnSceneWasInitialized` / `OnSceneWasUnloaded` | Unity 場景事件（maimai 幾乎只有一個主場景，畫面切換要看 Process，見 [09](09-遊戲流程與狀態讀取.md)） |
+| `OnSceneWasLoaded` / `OnSceneWasInitialized` / `OnSceneWasUnloaded` | Unity 場景事件（maimai 幾乎只有一個主場景，畫面切換要看 Process，見 [05](05-遊戲流程與狀態讀取.md)） |
 | `OnUpdate`、`OnLateUpdate`、`OnFixedUpdate`、`OnGUI` | 每幀；`OnGUI` 可以用 IMGUI 畫簡單除錯介面 |
 | `OnPreferencesLoaded` / `OnPreferencesSaved` | 設定檔載入 / 儲存 |
 | `OnApplicationQuit`、`OnDeinitializeMelon` | 結束 |
