@@ -233,7 +233,7 @@
 - **`ServicePointManager`** 是整個程序共用的，網路下載交給外部程式。
 - **跨版本**：關鍵成員用反射加防呆，找不到就停用該功能；或用 SHA-256 標明支援的 DLL 版本。
 - **ADX 解出雜訊**：漏了 `& 0x1fff`。
-- **人氣排行榜（みんなの人気楽曲 / POPULAR）分類看不到（SDEZ 1.70 IL 已確認；外面機台行為不同，原因未查明）**：`MusicSelectProcess.registerMusic` 只在有已登入玩家 `Detail.HighestRating < 4000` 時才建立（遊戲設計，數字寫在程式裡、等於黃色 Rating 門檻，沒有設定可改，只能 Harmony）。排行資料來自 `MusicRankingManager`（伺服器下發，否則用 `DataManager.GetMusicOffRankings()`）。
+- **人氣排行榜（みんなの人気楽曲 / POPULAR）分類看不到（SDEZ 1.70 IL 與實測已確認，2P 加 GUEST 就出現；外面機台行為不同，原因未查明）**：`MusicSelectProcess.registerMusic` 只在有已登入玩家 `Detail.HighestRating < 4000` 時才建立（遊戲設計，數字寫在程式裡、等於黃色 Rating 門檻，沒有設定可改，只能 Harmony）。排行資料來自 `MusicRankingManager`（伺服器下發，否則用 `DataManager.GetMusicOffRankings()`）。
 - **遊戲原本的拼錯**：`CharacterSelectProces`、`GetAchivement`、`deluxscore`、`getPlayFirstMsec`、`NavigationAnime.Welcom`。照遊戲的拼法寫，不確定時兩種都試。
 - **補丁不觸發**：小方法被 Mono JIT 內聯（`GetPartnerTexture2D(string)`、`InputManager.GetTouchPanelAreaDown`）。改掛呼叫端用的多載，或下一層較大的方法（`IO.TouchPanel.GameInputLog.TriggerOn`）。
 - **記憶體洩漏**：
