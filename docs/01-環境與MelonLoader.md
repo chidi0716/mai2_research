@@ -33,13 +33,90 @@ ilspycmd -p -o out/ \
 
 ## MelonLoader
 
-- 版本：0.6.4（Mono 版）。內含 HarmonyX（`MelonLoader\net35\0Harmony.dll`）。
-- 目錄：
-  - `Package\LocalAssets\…`：多個 mod 慣用的本機資源資料夾（例如 MaiL2d 模型、DxPassCompat 自製卡圖）
-  - `Package\Sinmai_Data\Plugins\`：原生 DLL（MaiL2d 會在這裡放 `Live2DCubismCore.dll`）
-  - `Package\Mods\*.dll`：mod 本體
-  - `Package\UserData\MelonPreferences.cfg`：`MelonPreferences` 存的設定
-  - `Package\MelonLoader\Latest.log`：日誌（mod 的 `LoggerInstance.Msg` / `MelonLogger.Msg` 都在這裡，會自動加上 `[mod 名稱]` 前綴）
+> 以下對照本機 SDEZ 1.70 的安裝、`Latest.log`、`MelonLoader\net35\MelonLoader.dll` 反編譯與附帶的 `MelonLoader.xml`（0.6.4）。
+
+- 版本：**0.6.4 Open-Beta**（Mono 版）。內含 HarmonyX（`MelonLoader\net35\0Harmony.dll`）、MonoMod、Mono.Cecil、Tomlet（TOML）。
+- 日誌開頭會印出 `Game Type: MonoBleedingEdge`、`Runtime Type: net35`、`Unity Version: 2018.4.7f1`、`Game Name: Sinmai`、`Game Developer: sega-interactive`（`MelonGame` 要填的就是這兩個）、`Game Version: 1.0`（Unity 的 `Application.version`，不是遊戲版本）。
+
+### 安裝結構（`Package\`）
+
+| 路徑 | 用途 |
+|---|---|
+| `version.dll` | MelonLoader 的代理 DLL（Unity 啟動時會載入它）。maimai-ngo 回報有機器改用 `winhttp.dll` 才有效（NGO 實測） |
+| `dobby.dll` | 原生 hook 函式庫（MelonLoader 啟動用） |
+| `MelonLoader\net35\` | Mono 遊戲用的 MelonLoader 本體與參考 DLL（**編譯 mod 參考這裡**） |
+| `MelonLoader\net6\`、`Dependencies\Il2CppAssemblyGenerator\` | IL2CPP 遊戲用，maimai 用不到 |
+| `MelonLoader\Dependencies\SupportModules\Mono.dll` | Mono 支援模組（日誌：`Support Module Loaded: ...\Mono.dll`） |
+| `MelonLoader\Dependencies\CompatibilityLayers\` | 其他 mod 框架的相容層（`IPA.dll`、`EOS.dll`） |
+| `MelonLoader\Latest.log`、`Logs\` | 本次日誌、歷次日誌 |
+| `UserLibs\` | 共用函式庫（最先載入，給多個 mod 共用的 DLL 放這裡） |
+| `Plugins\` | **MelonPlugin**（比 mod 早，能在遊戲初始化前做事）；注意不是 `Sinmai_Data\Plugins`（那是 Unity 原生 DLL） |
+| `Mods\` | **MelonMod** 本體 |
+| `UserData\` | `MelonPreferences.cfg`（TOML，有 mod 用 `MelonPreferences` 存設定才會產生；本機目前沒有）、各 mod 的資料（例 `UserData\MelonStartScreen`） |
+
+其他慣例：`Package\LocalAssets\…` 是多個 mod 共用的本機資源資料夾（AquaMai 直讀圖片、MaiL2d 模型、DxPassCompat 卡圖…）；`Package\Sinmai_Data\Plugins\` 放原生 DLL（MaiL2d 的 `Live2DCubismCore.dll`）。
+
+### 啟動順序（本機 `Latest.log`）
+
+1. `Preferences Loaded!`
+2. `Loading UserLibss from ...\UserLibs`
+3. `Loading Plugins from ...\Plugins`
+4. `MelonStartScreen`（開機進度畫面；`--melonloader.disablestartscreen` 可關）
+5. `Loading Mods from ...\Mods`：每個 DLL 印 `Melon Assembly loaded` + **SHA256**，再印各 mod 的名稱、版本、作者（`MelonInfo`）
+6. `Support Module Loaded: ...\Mono.dll`
+7. 各 mod 的 `OnInitializeMelon`（例：AquaMai 印 `> Applying ...` / `> Skipping incompatible patch: ...`）
+
+### 載入規則（反編譯 `MelonHandler`、`MelonBase`）
+
+- 只掃 `Mods\*.dll` **最上層**（`Directory.GetFiles(path, "*.dll")`），子資料夾裡的 DLL 不會被當 mod 載入。所以 `Mods\SongRequestMod\` 這種資料夾可以拿來放資料。
+- Plugin 放進 `Mods`（或反過來）會警告 `... is a MelonPlugin and cannot be loaded as a MelonMod. Make sure it's in the right folder.`。
+- 排序：先依相依關係做拓撲排序，再依 `MelonPriority` **由小到大**（預設 0）。
+- 自動套用 `[HarmonyPatch]`，除非組件加了 `[assembly: HarmonyDontPatchAll]`。
+
+### 生命週期回呼（`MelonBase` / `MelonMod`，0.6.4）
+
+| 回呼 | 時機 |
+|---|---|
+| `OnEarlyInitializeMelon` | 註冊後最早的時機 |
+| `OnInitializeMelon` | 讀設定、掛 Harmony |
+| `OnLateInitializeMelon` | 所有 mod 都初始化完之後 |
+| `OnSceneWasLoaded` / `OnSceneWasInitialized` / `OnSceneWasUnloaded` | Unity 場景事件（maimai 幾乎只有一個主場景，畫面切換要看 Process，見 [09](09-遊戲流程與狀態讀取.md)） |
+| `OnUpdate`、`OnLateUpdate`、`OnFixedUpdate`、`OnGUI` | 每幀；`OnGUI` 可以用 IMGUI 畫簡單除錯介面 |
+| `OnPreferencesLoaded` / `OnPreferencesSaved` | 設定檔載入 / 儲存 |
+| `OnApplicationQuit`、`OnDeinitializeMelon` | 結束 |
+
+- Plugin 另外有 `OnPreInitialization`、`OnApplicationEarlyStart`、`OnPreModsLoaded`、`OnApplicationStarted`。
+- 不想繼承也可以訂閱 `MelonEvents.OnUpdate`、`OnLateUpdate`、`OnGUI`、`OnSceneWasLoaded`、`OnApplicationQuit`… 等事件。
+- 其他工具：`MelonCoroutines.Start(IEnumerator)` / `Stop`（不用借遊戲的 MonoBehaviour 就能跑協程）、`LoggerInstance` / `MelonLogger`、`HarmonyInstance`。
+
+### 組件屬性（`MelonLoader.*Attribute`）
+
+- 必要：`MelonInfo(type, name, version, author)`、`MelonGame("sega-interactive", "Sinmai")`。`MelonGame(null, null)` 代表任何遊戲（MuMod 這樣寫）。
+- 常用：
+  - `MelonPriority(n)`：載入順序。
+  - `MelonOptionalDependencies(...)`、`MelonAdditionalDependencies(...)`、`MelonIncompatibleAssemblies(...)`：相依與互斥。
+  - `MelonGameVersion(...)`、`VerifyLoaderVersion(...)`、`VerifyLoaderBuild(...)`：限定版本。
+  - `MelonColor`、`MelonAuthorColor`：日誌顏色。
+  - `MelonID`、`MelonAdditionalCredits`、`MelonPlatform`、`MelonPlatformDomain`、`MelonProcess`。
+
+### 啟動參數（反編譯 `MelonLaunchOptions`，加在 `Sinmai.exe` 後面，前綴 `--`）
+
+- 主控台：`melonloader.hideconsole`、`melonloader.consoleontop`、`melonloader.consolemode`、`melonloader.consoledst`
+- 日誌：`melonloader.debug`、`melonloader.hidewarnings`、`melonloader.maxlogs`、`melonloader.maxwarnings`、`melonloader.maxerrors`
+- 載入：
+  - `melonloader.loadmodemods` / `melonloader.loadmodeplugins`：值 0 / 1 / 2 = NORMAL / DEV / BOTH。
+  - `melonloader.disablestartscreen`、`melonloader.disableunityclc`、`melonloader.unityversion`、`quitfix`
+- 除錯：`melonloader.launchdebugger`
+- `melonloader.agf*` 是 IL2CPP 用的，maimai 用不到。
+
+### 動態載入 mod（MuMod 的做法）
+
+MuMod（AquaMai 的更新器，Apache-2.0）本身是一個 `MelonGame(null, null)` 的小 mod：
+1. 下載或讀快取 `LocalAssets\MuMod.cache` 的 AquaMai 位元組。
+2. `Assembly.Load(bytes)`。
+3. `MelonAssembly.LoadMelonAssembly(名稱, asm, true)`，再對每個 `LoadedMelons` 呼叫 `Register()`。
+
+想做「自動更新的 mod」或「一個 DLL 帶多個 mod」可以照這個做。本機目前是直接放 `Mods\AquaMai.dll`（`MuMod.toml` 還在，但 `Mods` 裡沒有 `MuMod.dll`）。
 
 ## mod 專案設定
 

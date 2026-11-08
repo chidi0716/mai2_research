@@ -12,7 +12,7 @@ maimai DX（`Sinmai.exe`）的 MelonLoader mod 研究筆記：遊戲環境、怎
 
 | 文件 | 內容 |
 |---|---|
-| [01 環境與 MelonLoader](docs/01-環境與MelonLoader.md) | 遊戲與 MelonLoader 版本、mod 專案設定、生命週期、除錯方式 |
+| [01 環境與 MelonLoader](docs/01-環境與MelonLoader.md) | 遊戲與 MelonLoader 版本、安裝結構、載入順序與規則、生命週期回呼、屬性、啟動參數、動態載入、mod 專案設定、除錯 |
 | [02 接入遊戲的方法](docs/02-接入方法.md) | Harmony 補丁、讀寫私有成員、管理器、協程、輸入、額外資源 |
 | [03 遊戲內部結構](docs/03-遊戲內部結構.md) | Process / Monitor 架構、選曲畫面、曲目與譜面資料、DX/STD |
 | [04 音效系統（CRI ADX2）](docs/04-音效系統.md) | ACB/AWB 格式、音效表、ADX/HCA 解密、替換與轉向音效 |

@@ -10,6 +10,13 @@
 - 遊戲邏輯：`Package\Sinmai_Data\Managed\Assembly-CSharp.dll`，可用 ILSpy / `ilspycmd -p -o out -r Managed -r MelonLoader/net35 Assembly-CSharp.dll` 反編譯。
 - 版本代號：SDEZ = 日版（1.60／1.65／1.66／1.70；1.70 = MAGiCAL，2026-09），SDGB = 國服（1.50／1.55，版本字串如 `Ver.CN1.56-B`）。部分 SDEZ 1.66 包體要先啟動外置 AMDaemon（`Plugins\amdaemon_api.dll` 和 `Managed\AMDaemon.NET.dll` 必須同一套）。
 - Loader：MelonLoader **0.6.4 Mono**，內含 HarmonyX（`MelonLoader\net35\0Harmony.dll`）。
+  - 安裝：代理 `version.dll`（有機器要改用 `winhttp.dll`）+ `dobby.dll`；`MelonLoader\net35`（編譯參考）、`net6` / Il2Cpp 相關用不到。
+  - 載入順序：`UserLibs` → `Plugins`（MelonPlugin）→ 開機畫面 → `Mods`（印 SHA256）→ `SupportModules\Mono.dll` → 各 mod `OnInitializeMelon`。
+  - 只掃 `Mods\*.dll` 最上層，子資料夾可放資料。排序 = 相依拓撲排序後依 `MelonPriority` 小到大。
+  - 回呼：`OnEarlyInitializeMelon`、`OnInitializeMelon`、`OnLateInitializeMelon`、`OnSceneWasLoaded/Initialized/Unloaded`、`OnUpdate/OnLateUpdate/OnFixedUpdate/OnGUI`、`OnPreferencesLoaded/Saved`、`OnApplicationQuit`、`OnDeinitializeMelon`；也可訂閱 `MelonEvents.*`；協程用 `MelonCoroutines.Start`。
+  - 屬性：`MelonPriority`、`MelonOptionalDependencies`、`MelonIncompatibleAssemblies`、`MelonGameVersion`、`VerifyLoaderVersion`…；`MelonGame(null, null)` = 任何遊戲。
+  - 啟動參數：`--melonloader.hideconsole`、`--melonloader.disablestartscreen`、`--melonloader.debug`、`--melonloader.loadmodemods=0/1/2`、`--melonloader.launchdebugger`、`--quitfix`…
+  - 動態載入（MuMod）：`Assembly.Load(bytes)` → `MelonAssembly.LoadMelonAssembly(name, asm, true)` → 每個 `LoadedMelons` 呼叫 `Register()`。
 - 目錄：`Mods\*.dll`（mod）、`UserData\MelonPreferences.cfg`（`MelonPreferences`）、`MelonLoader\Latest.log`（日誌）、`LocalAssets\`（mod 慣用的本機資源）、`Sinmai_Data\Plugins\`（原生 DLL）。
 - csproj：`net48`、`LangVersion 9`、`Microsoft.NETFramework.ReferenceAssemblies`；參考 `MelonLoader.dll`、`0Harmony.dll`、`Assembly-CSharp.dll`、`UnityEngine.CoreModule.dll`（+ 依需要 `InputLegacyModule`、`ImageConversionModule`、`AssetBundleModule`、`UnityEngine.UI`），全部 `Private=false`。Linux 上 `dotnet build` 也能編。
 - 骨架：`[assembly: MelonInfo(typeof(Mod), name, ver, author)]`、`[assembly: MelonGame("sega-interactive", "Sinmai")]`；`MelonMod` 的 `OnInitializeMelon`（設定、Harmony）、`OnLateInitializeMelon`（起伺服器等）、`OnUpdate`（主執行緒每幀）、`OnApplicationQuit`。
