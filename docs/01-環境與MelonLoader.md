@@ -23,7 +23,7 @@ ilspycmd -p -o out/ \
 
 | 代號 | 說明 | 例 |
 |---|---|---|
-| SDEZ | 日版 | 1.60、1.65、1.66、1.70 |
+| SDEZ | 日版 | 1.60、1.65、1.66、1.70（1.70 = maimai でらっくす MAGiCAL，2026-09-17 上線） |
 | SDGB | 國服（中國版），版本字串像 `Ver.CN1.56-B` | 1.50、1.55 |
 
 - 主要成員（Process、`GameManager`、`GamePlayManager`、`NotesManager`、判定入口 `JudgeResultSt.UpdateScore`）在 SDGB 1.50～SDEZ 1.66 都還在，但細節欄位會變。

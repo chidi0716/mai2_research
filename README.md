@@ -20,7 +20,7 @@ maimai DX（`Sinmai.exe`）的 MelonLoader mod 研究筆記：遊戲環境、怎
 | [06 參考專題](docs/06-參考專題.md) | 點歌 mod 原作、扫码点歌、冰冰冰正解音、DxPassCompat、MaiL2d、murasame 角色包、maimai-dghub-link、NGO 銘牌包、maimai-ngo |
 | [07 SongRequest 架構](docs/07-SongRequest架構.md) | 點歌台 mod 的運作邏輯、API、遠端分享 |
 | [08 加入自訂內容](docs/08-加入自訂內容.md) | 自訂 ID、資料表注入、不上傳伺服器、AssetBundle / 語音 / 圖片、伙伴動畫、DX PASS |
-| [09 遊戲流程與狀態讀取](docs/09-遊戲流程與狀態讀取.md) | 全部畫面（Process）一覽、即時判定入口、譜面與進度、成績、倒數計時、版本與玩家名稱 |
+| [09 遊戲流程與狀態讀取](docs/09-遊戲流程與狀態讀取.md) | 全部畫面（Process）一覽、即時判定入口、譜面與進度、成績、倒數計時、版本與玩家名稱、按鈕 LED、自動播放、選項表 |
 | [10 資源與選項包](docs/10-資源與選項包.md) | StreamingAssets 選項包（`A???`）、收藏品 XML 與自動解鎖、貼圖載入、動態銘牌、改 `resources.assets` 換皮、執行期換圖入口 |
 | [11 效能與測試](docs/11-效能與測試.md) | 遊戲的 GC 時機、Mono Boehm GC 與洩漏、量測方式、機台按鍵與模擬、測試注意事項 |
 | [tools/cri](tools/cri/README.md) | 解析 ACB、解密 ADX、解碼 HCA、產生音效試聽頁的工具 |

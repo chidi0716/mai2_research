@@ -8,7 +8,7 @@
 
 - `Package\Sinmai.exe`：Unity **2018.4.7f1**、**Mono**（不是 IL2CPP）、x64。
 - 遊戲邏輯：`Package\Sinmai_Data\Managed\Assembly-CSharp.dll`，可用 ILSpy / `ilspycmd -p -o out -r Managed -r MelonLoader/net35 Assembly-CSharp.dll` 反編譯。
-- 版本代號：SDEZ = 日版（1.60／1.65／1.66／1.70），SDGB = 國服（1.50／1.55，版本字串如 `Ver.CN1.56-B`）。部分 SDEZ 1.66 包體要先啟動外置 AMDaemon（`Plugins\amdaemon_api.dll` 和 `Managed\AMDaemon.NET.dll` 必須同一套）。
+- 版本代號：SDEZ = 日版（1.60／1.65／1.66／1.70；1.70 = MAGiCAL，2026-09），SDGB = 國服（1.50／1.55，版本字串如 `Ver.CN1.56-B`）。部分 SDEZ 1.66 包體要先啟動外置 AMDaemon（`Plugins\amdaemon_api.dll` 和 `Managed\AMDaemon.NET.dll` 必須同一套）。
 - Loader：MelonLoader **0.6.4 Mono**，內含 HarmonyX（`MelonLoader\net35\0Harmony.dll`）。
 - 目錄：`Mods\*.dll`（mod）、`UserData\MelonPreferences.cfg`（`MelonPreferences`）、`MelonLoader\Latest.log`（日誌）、`LocalAssets\`（mod 慣用的本機資源）、`Sinmai_Data\Plugins\`（原生 DLL）。
 - csproj：`net48`、`LangVersion 9`、`Microsoft.NETFramework.ReferenceAssemblies`；參考 `MelonLoader.dll`、`0Harmony.dll`、`Assembly-CSharp.dll`、`UnityEngine.CoreModule.dll`（+ 依需要 `InputLegacyModule`、`ImageConversionModule`、`AssetBundleModule`、`UnityEngine.UI`），全部 `Private=false`。Linux 上 `dotnet build` 也能編。
@@ -115,6 +115,13 @@
   - 非打歌畫面每 250～1000 毫秒讀一次。
   - 用 `Stopwatch` 量慢路徑。
   - 具名 `Semaphore` 防止重複載入。
+
+### 3.6 其他系統（1.70）
+
+- **按鈕 LED**：`IO.MechaManager.LedIf[monIndex]`（`Mecha.Bd15070_4IF`）的 `SetColor(byte ledPos, Color32)`、`SetColorFet(byte, byte)`；`MechaManager.SetAllLEDOff()`。模擬器 / Maimoller 上會不會亮：未驗證。
+- **自動播放**：`GameManager.IsAutoPlay()`、`AutoJudge()`；`SystemConfig.config.IsAutoPlay` / `IsDebugDisp` / `IsAllOpen`。
+- **選項**：`DB.Option*IDEnum`（`Notespeed`、`Mirror`、`Judgetiming`、`Breakse`、`TapSuccessSe`、`Dispjudge`、`Trackskip`…），用 `GetValue()` 取值。
+- **只確認存在**：拍照（`PhotoEditProcess`、`WebCamManager`）、段位（`Process.CourseSelect/Prepare/Result`）、`GhostResult`、`CircleFinalResult`、`LoginBonus`、`SplitFlapDisplay`、`CustomNote`、`PartyLink`。
 
 ## 4. 音效（CRI ADX2）
 
